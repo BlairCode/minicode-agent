@@ -86,7 +86,7 @@ kbd { font-family: inherit; font-size: 10px; padding: 2px 5px; border-radius: 5p
 
 .conversation { min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 34px max(28px, calc((100% - 790px) / 2)); scrollbar-width: thin; scroll-behavior: smooth; }
 .empty-state { max-width: 720px; margin: clamp(18px, 7vh, 80px) auto 0; text-align: center; }
-.eyebrow { color: #7e8aa0; font-size: 9px; font-weight: 800; letter-spacing: 1.45px; text-transform: uppercase; }
+.eyebrow { font-family: "Roboto Mono", "JetBrains Mono", Consolas, monospace; color: #7e8aa0; font-size: 13px; font-weight: 800; letter-spacing: 1.45px; text-transform: uppercase; }
 .empty-state h2 { margin: 17px 0 12px; font-size: clamp(27px, 3.1vw, 38px); line-height: 1.17; letter-spacing: -1.1px; font-weight: 760; }
 .empty-state > p { color: #778399; font-size: 13px; line-height: 1.8; max-width: 550px; margin: 0 auto; }
 .starter-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; margin-top: 31px; }
@@ -282,4 +282,11 @@ input[role="switch"]:checked::after { transform: translateX(15px); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+.hero-title {
+  font-family: "Roboto Mono", "JetBrains Mono", Consolas, monospace;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 1px;
 }
