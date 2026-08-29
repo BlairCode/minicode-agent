@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minicode-agent"
+version = "0.1.0"
+description = "A lightweight, local-first coding agent runtime"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+  "openai>=1.40,<3",
+  "PyYAML>=6.0,<7",
+  "rich>=13.7,<15",
+  "keyring>=25.0,<26",
+]
+
+[tool.setuptools.packages.find]
+include = ["minicode_agent*"]
+
+[tool.setuptools.package-data]
+"minicode_agent.web" = ["static/*.html", "static/*.css", "static/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

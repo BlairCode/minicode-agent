@@ -1,0 +1,15 @@
+# Copy this file to config/user.yaml. Credentials belong in environment variables.
+model:
+  provider: qwen
+  model: qwen-plus
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+
+workspace:
+  root: ./workspace
+
+coding:
+  code_style: auto
+  comment_level: minimal
+
+security:
+  command_mode: ask

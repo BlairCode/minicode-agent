@@ -1,0 +1,53 @@
+model:
+  provider: qwen
+  model: qwen-plus
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key_env: DASHSCOPE_API_KEY
+  temperature: 0.2
+  max_tokens: 8192
+  request_timeout: 120
+  max_retries: 2
+
+agent:
+  default: coding
+  max_steps: 30
+  max_tool_errors: 5
+  context_char_budget: 100000
+  retry_base_seconds: 0.5
+
+workspace:
+  root: ./workspace
+  allow_outside_workspace: false
+  backup_before_overwrite: false
+  max_read_bytes: 1000000
+  max_tool_output_chars: 20000
+
+coding:
+  default_language: auto
+  code_style: auto
+  comment_level: minimal
+  comment_language: chinese
+  prefer_existing_style: true
+
+security:
+  command_mode: ask
+  command_timeout: 30
+  network_access: false
+
+leetcode:
+  language: cpp
+  mode: interview
+  generate_tests: true
+  save_solution: true
+  save_explanation: true
+  include_complexity: true
+
+ui:
+  show_tool_calls: true
+  show_command_output: true
+  web_port: 8765
+  open_browser: true
+
+storage:
+  data_dir: null
+  keep_history: true

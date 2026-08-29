@@ -1,0 +1,68 @@
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments and packaging output
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Credentials and personal configuration
+.env
+.env.*
+!.env.example
+config/user.yaml
+config/user.yml
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime data and generated workspaces
+/workspace/*
+!/workspace/.gitkeep
+/storage/
+/sessions/
+/.minicode/
+/settings.json
+*.log
+*.tmp
+*.bak
+
+# Compiled local artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+
+# Local-only documents and helper material
+/docs/
+/scripts/
+/README.txt
+/local-only/
+/tmp/
+/*.pdf
+
+# Editors and operating-system files
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
