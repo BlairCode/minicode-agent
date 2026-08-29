@@ -33,8 +33,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar, .files-panel { background: var(--surface); z-index: 2; }
 .sidebar { border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 22px 16px 16px; min-width: 0; }
 .brand-row { display: flex; align-items: center; justify-content: center; padding: 0 0 19px; }
-.brand-logo-frame { position: relative; width: 205px; height: 60px; overflow: hidden; }
-.brand-logo { position: absolute; left: 0; top: -68px; width: 205px; height: 205px; object-fit: contain; display: block; }
+.brand-logo-frame { width: 205px; height: 68px; display: flex; align-items: center; }
+.brand-logo { width: 205px; height: auto; object-fit: contain; display: block; }
 
 .new-chat { width: 100%; border: 0; border-radius: 12px; background: var(--blue); color: white; min-height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 8px; font-weight: 650; box-shadow: 0 8px 18px rgba(66, 99, 235, .22); transition: .18s ease; }
 .new-chat:hover { background: var(--blue-dark); transform: translateY(-1px); }
