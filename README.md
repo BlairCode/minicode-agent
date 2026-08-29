@@ -2,12 +2,8 @@
   <img src="minicode_agent/web/imgs/logo.png" alt="MiniCode Agent" width="520">
 </p>
 
-<h1 align="center">MiniCode Agent</h1>
-
-<p align="center"><strong>MINI IN NAME. MEGA IN CODE.</strong></p>
-
 <p align="center">
-  一个面向 Qwen 的本地编程 Agent：在受限工作区内读取和修改代码、运行命令，并在 Web UI 中呈现可核验的执行结果。
+  面向 Qwen 的本地编程 Agent：在受限工作区内读取和修改代码、运行命令，并在 Web UI 中呈现可核验的执行结果。
 </p>
 
 <p align="center">
