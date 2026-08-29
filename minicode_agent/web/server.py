@@ -20,7 +20,9 @@ STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".png": "image/png",
 }
+SESSION_TOKEN_MARKER = b"__MINICODE_SESSION_TOKEN__"
 
 
 class LocalWebServer(ThreadingHTTPServer):
@@ -32,11 +34,13 @@ class LocalWebServer(ThreadingHTTPServer):
         controller: WebController,
         token: str,
         static_root: Path,
+        image_root: Path,
     ) -> None:
         super().__init__(address, LocalRequestHandler)
         self.controller = controller
         self.token = token
         self.static_root = static_root
+        self.image_root = image_root
 
 
 class LocalRequestHandler(BaseHTTPRequestHandler):
@@ -196,27 +200,36 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
         self._error(HTTPStatus.NOT_FOUND, "API route not found")
 
     def _serve_static(self, path: str) -> None:
-        names = {"/": "index.html", "/index.html": "index.html", "/app.css": "app.css", "/app.js": "app.js"}
-        name = names.get(path)
-        if not name:
+        files = {
+            "/": self.server.static_root / "index.html",
+            "/index.html": self.server.static_root / "index.html",
+            "/app.css": self.server.static_root / "app.css",
+            "/app.js": self.server.static_root / "app.js",
+            "/logo.png": self.server.image_root / "logo.png",
+        }
+        file = files.get(path)
+        if not file:
             self._error(HTTPStatus.NOT_FOUND, "not found")
             return
-        file = self.server.static_root / name
         try:
             body = file.read_bytes()
         except OSError:
             self._error(HTTPStatus.NOT_FOUND, "asset not found")
             return
+        if file.name == "index.html":
+            body = body.replace(SESSION_TOKEN_MARKER, self.server.token.encode("ascii"))
         self._send(HTTPStatus.OK, body, STATIC_TYPES[file.suffix])
 
 
 def create_server(controller: WebController, port: int = 8765) -> tuple[LocalWebServer, str]:
     token = secrets.token_urlsafe(32)
-    static_root = Path(__file__).resolve().parent / "static"
+    web_root = Path(__file__).resolve().parent
+    static_root = web_root / "static"
+    image_root = web_root / "imgs"
     try:
-        server = LocalWebServer(("127.0.0.1", port), controller, token, static_root)
+        server = LocalWebServer(("127.0.0.1", port), controller, token, static_root, image_root)
     except OSError:
-        server = LocalWebServer(("127.0.0.1", 0), controller, token, static_root)
+        server = LocalWebServer(("127.0.0.1", 0), controller, token, static_root, image_root)
     return server, token
 
 
@@ -231,9 +244,9 @@ def run_web(
     open_browser: bool = True,
 ) -> int:
     controller = WebController(app, config, project_root, settings, settings_store, credential_store)
-    server, token = create_server(controller, config.ui.web_port)
+    server, _token = create_server(controller, config.ui.web_port)
     port = server.server_address[1]
-    url = f"http://127.0.0.1:{port}/?token={token}"
+    url = f"http://127.0.0.1:{port}/"
     if open_browser:
         threading.Timer(0.25, lambda: webbrowser.open(url)).start()
     print(f"MiniCode Web UI: {url}")

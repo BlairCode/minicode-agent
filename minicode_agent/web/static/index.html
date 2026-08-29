@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
+  <meta name="minicode-session-token" content="__MINICODE_SESSION_TOKEN__">
   <title>MiniCode Agent</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/app.css">
@@ -12,10 +13,8 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true"><span>&lt;</span><i></i><span>/&gt;</span></div>
-        <div>
-          <strong>MiniCode</strong>
-          <span>Local coding agent</span>
+        <div class="brand-logo-frame">
+          <img class="brand-logo" src="/logo.png" alt="MiniCode Agent">
         </div>
       </div>
 
@@ -45,17 +44,14 @@
     <main class="main-panel">
       <header class="topbar">
         <button class="icon-button mobile-only" id="toggle-sidebar" type="button" aria-label="打开侧栏">☰</button>
-        <div class="page-title">
-          <h1>智能编程助手</h1>
-          <p id="conversation-caption">开始一个新的本地任务</p>
-        </div>
         <div class="topbar-actions">
           <label class="agent-picker">
-            <span>Agent</span>
+            <span class="agent-picker-label">Agent</span>
             <select id="agent-select" aria-label="选择 Agent">
               <option value="coding">Coding</option>
               <option value="leetcode">LeetCode</option>
             </select>
+            <span class="agent-locked-value" id="agent-locked" hidden>Coding</span>
           </label>
           <span class="model-badge"><i></i><span id="model-label">Qwen · qwen-plus</span></span>
           <span class="run-status ready" id="run-status"><i></i><span>就绪</span></span>
@@ -65,9 +61,8 @@
 
       <section class="conversation" id="conversation" aria-live="polite">
         <div class="empty-state" id="empty-state">
-          <div class="empty-icon" aria-hidden="true">⌁</div>
           <span class="eyebrow">LOCAL · SAFE · AUDITABLE</span>
-          <h2>把想法交给 Agent，<br>让每一步都有迹可循。</h2>
+          <h2>MINI IN NAME.<br>MEGA IN CODE.</h2>
           <p>它可以阅读代码、修改文件、运行测试，并把执行步骤、工具结果与输出文件清楚地展示给你。</p>
           <div class="starter-grid">
             <button class="starter" type="button" data-prompt="阅读当前项目，概括目录结构与关键模块，并指出最值得优先改进的地方。">

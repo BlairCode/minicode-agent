@@ -25,8 +25,8 @@ const elements = {
   send: $("#send-task"),
   stop: $("#stop-run"),
   status: $("#run-status"),
-  caption: $("#conversation-caption"),
   agent: $("#agent-select"),
+  agentLocked: $("#agent-locked"),
   model: $("#model-label"),
   history: $("#history-list"),
   fileList: $("#file-list"),
@@ -48,8 +48,9 @@ function element(tag, className, text) {
 function getToken() {
   const url = new URL(window.location.href);
   const queryToken = url.searchParams.get("token") || "";
-  if (queryToken) window.sessionStorage.setItem("minicode-session-token", queryToken);
-  const token = queryToken || window.sessionStorage.getItem("minicode-session-token") || "";
+  const pageToken = document.querySelector('meta[name="minicode-session-token"]')?.getAttribute("content") || "";
+  const token = pageToken || queryToken || window.sessionStorage.getItem("minicode-session-token") || "";
+  if (token) window.sessionStorage.setItem("minicode-session-token", token);
   url.searchParams.delete("token");
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   return token;
@@ -77,11 +78,20 @@ function setStatus(kind, label) {
   elements.status.querySelector("span").textContent = label;
 }
 
+function setAgentLocked(locked) {
+  const value = elements.agent.value === "leetcode" ? "LeetCode" : "Coding";
+  elements.agent.hidden = locked;
+  elements.agentLocked.hidden = !locked;
+  elements.agentLocked.textContent = value;
+  elements.agent.closest(".agent-picker").classList.toggle("locked", locked);
+}
+
 function setRunning(value) {
   state.running = value;
   elements.send.disabled = value;
   elements.stop.hidden = !value;
-  elements.agent.disabled = value || Boolean(state.conversationId);
+  elements.agent.disabled = value;
+  setAgentLocked(value || Boolean(state.conversationId));
   if (value) setStatus("running", "执行中");
 }
 
@@ -379,7 +389,6 @@ function handleEvent(item, historical = false) {
       state.renderedFinal = false;
       appendMessage("user", payload.task, "你", timestamp);
     }
-    if (!historical && Number(payload.turn || 1) === 1) elements.caption.textContent = payload.task || "正在执行任务";
   } else if (name === "step") {
     appendStep(payload.number || "—");
   } else if (name === "model_action") {
@@ -430,10 +439,10 @@ function resetView() {
   $("#file-preview").hidden = true;
   elements.approvalModal.hidden = true;
   elements.empty.hidden = false;
-  elements.caption.textContent = "开始一个新的本地任务";
   document.querySelectorAll(".history-item.active").forEach((node) => node.classList.remove("active"));
   setRunning(false);
   elements.agent.disabled = false;
+  setAgentLocked(false);
   setStatus("ready", "就绪");
 }
 
@@ -513,13 +522,11 @@ async function pollRun() {
 async function startRun() {
   const task = elements.input.value.trim();
   if (!task || state.running) return;
-  const isFollowUp = Boolean(state.conversationId);
   state.currentExecution = null;
   state.activeStep = null;
   state.renderedFinal = false;
   showConversation();
   appendMessage("user", task, "你");
-  if (!isFollowUp) elements.caption.textContent = task;
   elements.input.value = "";
   resizeInput();
   setRunning(true);
@@ -529,7 +536,7 @@ async function startRun() {
     state.conversationId = payload.id;
     state.fileWorkspaceId = payload.id;
     state.pollAfter = Number.isInteger(payload.after) ? payload.after : -1;
-    elements.agent.disabled = true;
+    setAgentLocked(true);
     pollRun();
   } catch (error) {
     setRunning(false);
@@ -584,11 +591,10 @@ async function openHistory(session, button) {
   button.classList.add("active");
   elements.empty.hidden = true;
   elements.agent.value = session.agent === "leetcode" ? "leetcode" : "coding";
-  elements.caption.textContent = session.task || "历史对话";
   state.conversationId = session.id;
   state.runId = session.id;
   state.fileWorkspaceId = session.workspace_id || session.id;
-  elements.agent.disabled = true;
+  setAgentLocked(true);
   try {
     const events = await api(`/api/history/${session.id}`);
     events.forEach((item) => handleEvent(item, true));
@@ -648,8 +654,7 @@ async function saveSettings(event) {
   try {
     const settings = await api("/api/settings", { method: "PUT", body: JSON.stringify(payload) });
     fillSettings(settings);
-    $("#save-message").textContent = "设置已保存";
-    window.setTimeout(closeSettings, 650);
+    $("#save-message").textContent = "设置已保存，可继续调整或关闭";
   } catch (error) {
     $("#save-message").textContent = "";
     toast(error.message, true);
@@ -695,7 +700,6 @@ function bindEvents() {
   $("#open-settings").addEventListener("click", openSettings);
   $("#close-settings").addEventListener("click", closeSettings);
   $("#cancel-settings").addEventListener("click", closeSettings);
-  elements.settingsModal.addEventListener("click", (event) => { if (event.target === elements.settingsModal) closeSettings(); });
   elements.settingsForm.addEventListener("submit", saveSettings);
   $("#close-preview").addEventListener("click", () => { $("#file-preview").hidden = true; });
   $("#toggle-sidebar").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
@@ -704,8 +708,11 @@ function bindEvents() {
   document.querySelectorAll(".starter").forEach((button) => button.addEventListener("click", () => { elements.input.value = button.dataset.prompt || ""; resizeInput(); elements.input.focus(); }));
   document.querySelectorAll("[data-answer]").forEach((button) => button.addEventListener("click", () => resolveApproval(button.dataset.answer)));
   document.addEventListener("keydown", (event) => {
+    if (!elements.settingsModal.hidden) {
+      if (event.key === "Escape") closeSettings();
+      return;
+    }
     if (event.ctrlKey && event.key.toLowerCase() === "k") { event.preventDefault(); newConversation(); }
-    if (event.key === "Escape" && !elements.settingsModal.hidden) closeSettings();
   });
 }
 

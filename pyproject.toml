@@ -20,7 +20,7 @@ dependencies = [
 include = ["minicode_agent*"]
 
 [tool.setuptools.package-data]
-"minicode_agent.web" = ["static/*.html", "static/*.css", "static/*.js"]
+"minicode_agent.web" = ["static/*.html", "static/*.css", "static/*.js", "imgs/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

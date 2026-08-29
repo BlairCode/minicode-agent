@@ -59,8 +59,20 @@ def test_local_server_serves_assets_and_protects_api() -> None:
         status, headers, body = request(server, "GET", "/")
         assert status == 200
         assert b"MiniCode Agent" in body
+        assert b"MINI IN NAME" in body
+        assert b'src="/logo.png"' in body
+        assert b'id="agent-locked"' in body
+        assert b'class="empty-icon"' not in body
+        assert b"__MINICODE_SESSION_TOKEN__" not in body
+        assert f'content="{token}"'.encode() in body
+        assert "智能编程助手".encode() not in body
         assert "default-src 'self'" in headers["Content-Security-Policy"]
         assert headers["X-Frame-Options"] == "DENY"
+
+        status, headers, body = request(server, "GET", "/logo.png")
+        assert status == 200
+        assert headers["Content-Type"] == "image/png"
+        assert body.startswith(b"\x89PNG\r\n\x1a\n")
 
         status, _, payload = request(server, "GET", "/api/bootstrap")
         assert status == 403
