@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MiniCode Agent</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span>&lt;</span><i></i><span>/&gt;</span></div>
+        <div>
+          <strong>MiniCode</strong>
+          <span>Local coding agent</span>
+        </div>
+      </div>
+
+      <button class="new-chat" id="new-chat" type="button">
+        <span aria-hidden="true">＋</span>
+        新建对话
+        <kbd>Ctrl K</kbd>
+      </button>
+
+      <div class="section-heading">
+        <span>最近对话</span>
+        <button class="icon-button subtle" id="refresh-history" type="button" aria-label="刷新历史">↻</button>
+      </div>
+      <nav class="history-list" id="history-list" aria-label="历史对话"></nav>
+
+      <div class="sidebar-footer">
+        <div class="privacy-note">
+          <span class="privacy-dot"></span>
+          <div><strong>本地安全模式</strong><small>凭据与记录不进入项目仓库</small></div>
+        </div>
+        <button class="settings-button" id="open-settings" type="button">
+          <span aria-hidden="true">⚙</span><span>设置</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="toggle-sidebar" type="button" aria-label="打开侧栏">☰</button>
+        <div class="page-title">
+          <h1>智能编程助手</h1>
+          <p id="conversation-caption">开始一个新的本地任务</p>
+        </div>
+        <div class="topbar-actions">
+          <label class="agent-picker">
+            <span>Agent</span>
+            <select id="agent-select" aria-label="选择 Agent">
+              <option value="coding">Coding</option>
+              <option value="leetcode">LeetCode</option>
+            </select>
+          </label>
+          <span class="model-badge"><i></i><span id="model-label">Qwen · qwen-plus</span></span>
+          <span class="run-status ready" id="run-status"><i></i><span>就绪</span></span>
+          <button class="icon-button mobile-only" id="toggle-files" type="button" aria-label="打开输出文件">▱</button>
+        </div>
+      </header>
+
+      <section class="conversation" id="conversation" aria-live="polite">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon" aria-hidden="true">⌁</div>
+          <span class="eyebrow">LOCAL · SAFE · AUDITABLE</span>
+          <h2>把想法交给 Agent，<br>让每一步都有迹可循。</h2>
+          <p>它可以阅读代码、修改文件、运行测试，并把执行步骤、工具结果与输出文件清楚地展示给你。</p>
+          <div class="starter-grid">
+            <button class="starter" type="button" data-prompt="阅读当前项目，概括目录结构与关键模块，并指出最值得优先改进的地方。">
+              <span>⌘</span><strong>理解项目</strong><small>梳理结构与关键模块</small>
+            </button>
+            <button class="starter" type="button" data-prompt="检查当前项目中的问题，修复后运行相关测试，直到测试通过。">
+              <span>✓</span><strong>修复与测试</strong><small>定位问题并验证结果</small>
+            </button>
+            <button class="starter" type="button" data-prompt="为当前项目补充必要的自动化测试，并说明覆盖了哪些边界情况。">
+              <span>◇</span><strong>补充测试</strong><small>覆盖关键路径与边界</small>
+            </button>
+          </div>
+        </div>
+        <div class="message-stream" id="message-stream"></div>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="composer" id="composer">
+          <textarea id="task-input" rows="1" maxlength="100000" placeholder="描述你希望完成的编程任务…" aria-label="任务内容"></textarea>
+          <div class="composer-footer">
+            <span><kbd>Ctrl</kbd> <kbd>Enter</kbd> 发送</span>
+            <div class="composer-actions">
+              <button class="stop-button" id="stop-run" type="button" hidden><span>■</span> 停止</button>
+              <button class="send-button" id="send-task" type="button">发送 <span>↑</span></button>
+            </div>
+          </div>
+        </div>
+        <p class="local-hint">仅监听 127.0.0.1 · 高风险操作会等待你的确认</p>
+      </footer>
+    </main>
+
+    <aside class="files-panel" id="files-panel">
+      <div class="files-header">
+        <div><span class="eyebrow">ARTIFACTS</span><h2>输出文件</h2></div>
+        <span class="count-badge" id="file-count">0</span>
+        <button class="icon-button mobile-only" id="close-files" type="button" aria-label="关闭输出文件">×</button>
+      </div>
+      <div class="files-empty" id="files-empty">
+        <div aria-hidden="true">▱</div>
+        <strong>尚无输出文件</strong>
+        <p>Agent 创建或修改的文件会集中显示在这里。</p>
+      </div>
+      <div class="file-list" id="file-list"></div>
+      <div class="file-preview" id="file-preview" hidden>
+        <div class="preview-head"><strong id="preview-name">文件预览</strong><button class="icon-button subtle" id="close-preview" type="button" aria-label="关闭预览">×</button></div>
+        <pre><code id="preview-content"></code></pre>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal-backdrop" id="settings-modal" hidden>
+    <section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="modal-head">
+        <div><span class="eyebrow">PREFERENCES</span><h2 id="settings-title">设置</h2><p>定制模型、工作区与代码生成偏好。</p></div>
+        <button class="icon-button" id="close-settings" type="button" aria-label="关闭设置">×</button>
+      </header>
+      <form id="settings-form">
+        <div class="settings-scroll">
+          <fieldset>
+            <legend>模型服务</legend>
+            <div class="form-grid">
+              <label><span>服务商</span><select name="provider"><option value="qwen">Qwen / DashScope</option><option value="openai-compatible">OpenAI-compatible</option></select></label>
+              <label><span>模型</span><input name="model" autocomplete="off" placeholder="qwen-plus"></label>
+              <label><span>请求超时（秒）</span><input name="request_timeout" type="number" min="10" max="600" step="10"></label>
+              <label class="wide"><span>Base URL</span><input name="base_url" type="url" autocomplete="off"></label>
+              <label class="wide"><span>API Key</span><input name="api_key" type="password" autocomplete="new-password" placeholder="留空则保持当前凭据"></label>
+            </div>
+            <div class="credential-row"><span id="credential-status">正在检查系统凭据…</span><label class="check-label"><input name="remove_api_key" type="checkbox"> 删除已保存的凭据</label></div>
+          </fieldset>
+          <fieldset>
+            <legend>工作区与安全</legend>
+            <div class="form-grid">
+              <label class="wide"><span>默认工作区 / 输出目录</span><input name="workspace" autocomplete="off"></label>
+              <label><span>命令策略</span><select name="command_mode"><option value="strict">Strict · 最谨慎</option><option value="ask">Ask · 风险操作询问</option><option value="full">Full · 更高自动化</option></select></label>
+              <label class="toggle-label"><span><b>允许网络命令</b><small>仍受命令风险策略约束</small></span><input name="network_access" type="checkbox" role="switch"></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>代码偏好</legend>
+            <div class="form-grid three">
+              <label><span>默认语言</span><input name="default_language" autocomplete="off" placeholder="auto"></label>
+              <label><span>代码风格</span><select name="code_style"><option value="auto">跟随项目</option><option value="pep8">PEP 8</option><option value="google">Google</option><option value="llvm">LLVM</option><option value="microsoft">Microsoft</option></select></label>
+              <label><span>注释密度</span><select name="comment_level"><option value="none">无</option><option value="minimal">精简</option><option value="normal">适中</option><option value="detailed">详细</option></select></label>
+              <label><span>算法语言</span><input name="leetcode_language" autocomplete="off" placeholder="cpp"></label>
+              <label><span>算法模式</span><select name="leetcode_mode"><option value="interview">Interview</option><option value="hint">Hint</option><option value="solve">Solve</option><option value="review">Review</option></select></label>
+            </div>
+          </fieldset>
+        </div>
+        <footer class="modal-actions"><span class="save-message" id="save-message"></span><button class="secondary-button" id="cancel-settings" type="button">取消</button><button class="primary-button" type="submit">保存设置</button></footer>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop approval-layer" id="approval-modal" hidden>
+    <section class="modal approval-modal" role="alertdialog" aria-modal="true" aria-labelledby="approval-title">
+      <div class="approval-icon">!</div>
+      <span class="eyebrow">ACTION REQUIRED</span>
+      <h2 id="approval-title">需要你的确认</h2>
+      <p id="approval-message"></p>
+      <div class="approval-actions">
+        <button class="secondary-button" data-answer="n" type="button">拒绝</button>
+        <button class="secondary-button" data-answer="a" type="button">本次会话允许</button>
+        <button class="primary-button" data-answer="y" type="button">仅允许一次</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
