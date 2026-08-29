@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Callable
 
 
@@ -31,7 +31,11 @@ class PathPolicy:
             raise PathPolicyError("path must be a non-empty string")
         if "\x00" in user_path:
             raise PathPolicyError("path contains a null byte")
-        raw = Path(user_path)
+        host_path = Path(user_path)
+        windows_path = PureWindowsPath(user_path)
+        if windows_path.drive and not host_path.drive:
+            raise PathPolicyError("path is outside the workspace")
+        raw = Path(user_path.replace("\\", "/"))
         candidate = raw if raw.is_absolute() else self.workspace / raw
         try:
             resolved = candidate.resolve(strict=must_exist)
@@ -62,4 +66,3 @@ class PathPolicy:
             return path.relative_to(self.workspace).as_posix() or "."
         except ValueError:
             return str(path)
-

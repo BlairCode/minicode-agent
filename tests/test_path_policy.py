@@ -13,12 +13,28 @@ def test_allows_workspace_file(tmp_path: Path) -> None:
     assert policy.resolve("src/app.py") == target.resolve()
 
 
-@pytest.mark.parametrize("value", ["../secret.txt", "../../outside", "..\\outside.txt"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "../secret.txt",
+        "../../outside",
+        "..\\outside.txt",
+        "src\\..\\..\\outside.txt",
+        "C:\\outside.txt",
+    ],
+)
 def test_rejects_path_traversal(tmp_path: Path, value: str) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     with pytest.raises(PathPolicyError, match="outside"):
         PathPolicy(workspace).resolve(value)
+
+
+def test_accepts_windows_separators_inside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "src" / "app.py"
+    assert PathPolicy(workspace).resolve("src\\app.py") == target.resolve()
 
 
 def test_outside_access_requires_explicit_approval(tmp_path: Path) -> None:
@@ -30,4 +46,3 @@ def test_outside_access_requires_explicit_approval(tmp_path: Path) -> None:
         denied.resolve(str(outside))
     allowed = PathPolicy(workspace, allow_outside_workspace=True, outside_approval=lambda path: path == outside)
     assert allowed.resolve(str(outside)) == outside.resolve()
-
