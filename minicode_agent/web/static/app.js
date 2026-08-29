@@ -49,8 +49,7 @@ function getToken() {
   const url = new URL(window.location.href);
   const queryToken = url.searchParams.get("token") || "";
   const pageToken = document.querySelector('meta[name="minicode-session-token"]')?.getAttribute("content") || "";
-  const token = pageToken || queryToken || window.sessionStorage.getItem("minicode-session-token") || "";
-  if (token) window.sessionStorage.setItem("minicode-session-token", token);
+  const token = pageToken || queryToken;
   url.searchParams.delete("token");
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   return token;
