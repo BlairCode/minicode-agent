@@ -11,6 +11,7 @@ from minicode_agent.tools.dispatcher import ToolDispatcher
 from minicode_agent.tools.registry import ToolRegistry
 
 from .context import ContextManager
+from .explanation import describe_tool_calls
 from .spec import AgentSpec
 from .state import AgentRun, AgentState
 from .stop import StopPolicy
@@ -94,7 +95,11 @@ class AgentRuntime:
             self.context.add_assistant_tool_calls(response.text, response.tool_calls)
             self._emit(
                 "model_action",
-                {"summary": response.text, "tools": [call.name for call in response.tool_calls]},
+                {
+                    "description": describe_tool_calls(response.tool_calls),
+                    "summary": response.text,
+                    "tools": [call.name for call in response.tool_calls],
+                },
             )
             for call in response.tool_calls:
                 if self.cancel_event.is_set():
@@ -120,6 +125,10 @@ class AgentRuntime:
         run.final_response = final_text
         run.state = AgentState.COMPLETED
         run.stop_reason = "model produced a final response"
+        self._emit(
+            "model_action",
+            {"description": "整理执行结果并生成最终回答", "summary": "", "tools": []},
+        )
         self._emit("final", {"text": final_text})
         return True
 

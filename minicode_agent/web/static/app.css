@@ -146,6 +146,7 @@ kbd { font-family: inherit; font-size: 10px; padding: 2px 5px; border-radius: 5p
 .step-marker.failed .step-loading { color: var(--red); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .action-summary { color: #526077; font-size: 11px; line-height: 1.65; margin: 7px 0 9px; }
+.action-summary.pending { color: #8b95a7; }
 .tool-card { background: white; border: 1px solid var(--line); border-radius: 11px; margin: 8px 0; overflow: hidden; }
 .tool-head { min-height: 38px; padding: 0 11px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); background: #fafbfc; }
 .tool-icon { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: #eaf0ff; color: var(--blue); font-size: 10px; font-weight: 850; }

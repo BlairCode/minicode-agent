@@ -13,6 +13,7 @@ const state = {
   outputPaths: new Set(),
   currentExecution: null,
   activeStep: null,
+  activeAction: null,
   renderedFinal: false,
 };
 
@@ -299,14 +300,17 @@ function appendStep(number) {
   setStatus("running", `步骤 ${number}`);
   const marker = element("div", "step-marker active");
   marker.append(element("span", "step-label", `步骤 ${number}`), element("span", "step-loading"));
-  executionGroup().append(marker);
+  const action = element("div", "action-summary pending", "正在分析任务并规划下一步");
+  executionGroup().append(marker, action);
   state.activeStep = marker;
+  state.activeAction = action;
   scrollConversation();
 }
 
 function finishActiveStep(failed = false) {
   if (!state.activeStep || !state.activeStep.isConnected) {
     state.activeStep = null;
+    state.activeAction = null;
     return;
   }
   state.activeStep.classList.remove("active");
@@ -314,12 +318,18 @@ function finishActiveStep(failed = false) {
   const indicator = state.activeStep.querySelector(".step-loading");
   if (indicator) indicator.textContent = failed ? "×" : "✓";
   state.activeStep = null;
+  state.activeAction = null;
 }
 
-function appendAction(summary, tools) {
+function appendAction(description, summary, tools) {
   setStatus("running", "执行中");
-  const text = summary || (tools && tools.length ? `准备调用 ${tools.join("、")}` : "正在规划下一步操作");
-  executionGroup().append(element("div", "action-summary", text));
+  const text = description || summary || (tools && tools.length ? `调用 ${tools.join("、")} 完成当前操作` : "正在规划下一步操作");
+  if (state.activeAction && state.activeAction.isConnected) {
+    state.activeAction.textContent = text;
+    state.activeAction.classList.remove("pending");
+  } else {
+    executionGroup().append(element("div", "action-summary", text));
+  }
   scrollConversation();
 }
 
@@ -385,13 +395,14 @@ function handleEvent(item, historical = false) {
     if (historical) {
       state.currentExecution = null;
       state.activeStep = null;
+      state.activeAction = null;
       state.renderedFinal = false;
       appendMessage("user", payload.task, "你", timestamp);
     }
   } else if (name === "step") {
     appendStep(payload.number || "—");
   } else if (name === "model_action") {
-    appendAction(payload.summary, payload.tools);
+    appendAction(payload.description, payload.summary, payload.tools);
   } else if (name === "tool_call") {
     appendToolCall(payload);
   } else if (name === "tool_result") {
@@ -428,6 +439,7 @@ function resetView() {
   state.pollAfter = -1;
   state.currentExecution = null;
   state.activeStep = null;
+  state.activeAction = null;
   state.renderedFinal = false;
   state.pendingApproval = null;
   state.outputPaths.clear();
@@ -523,6 +535,7 @@ async function startRun() {
   if (!task || state.running) return;
   state.currentExecution = null;
   state.activeStep = null;
+  state.activeAction = null;
   state.renderedFinal = false;
   showConversation();
   appendMessage("user", task, "你");

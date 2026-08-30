@@ -13,6 +13,7 @@ from conftest import ScriptedLLM
 
 
 def test_runtime_feeds_tool_result_back_to_model(config, tmp_path: Path) -> None:
+    events: list[tuple[str, dict]] = []
     model = ScriptedLLM(
         [
             ModelResponse(tool_calls=[ToolCall("write-1", "write_file", {"path": "hello.py", "content": "print('hi')\n"})]),
@@ -22,7 +23,12 @@ def test_runtime_feeds_tool_result_back_to_model(config, tmp_path: Path) -> None
     )
     config.storage.data_dir = str(tmp_path / "data")
     app = Application(config, project_root=Path(__file__).resolve().parents[1], llm=model)
-    runtime = app.create_runtime("coding", interactive=False, record_sessions=False)
+    runtime = app.create_runtime(
+        "coding",
+        interactive=False,
+        record_sessions=False,
+        event_handler=lambda event, payload: events.append((event, payload)),
+    )
     run = runtime.run("Create hello.py and verify it")
 
     assert run.state is AgentState.COMPLETED
@@ -30,6 +36,9 @@ def test_runtime_feeds_tool_result_back_to_model(config, tmp_path: Path) -> None
     assert (app.workspace / "hello.py").exists()
     second_request = model.calls[1][0]
     assert any(message.get("role") == "tool" and "Created hello.py" in message["content"] for message in second_request)
+    actions = [payload for event, payload in events if event == "model_action"]
+    assert actions[0]["description"] == "编写 hello.py"
+    assert actions[-1]["description"] == "整理执行结果并生成最终回答"
 
 
 def test_runtime_stops_at_max_steps(config, tmp_path: Path) -> None:
