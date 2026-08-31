@@ -30,8 +30,16 @@ def test_truncated_tool_result_remains_valid_json() -> None:
     context.add_assistant_tool_calls("", [call])
     context.add_tool_result(
         call,
-        ToolResult(True, output="x" * 5000, data={"stdout": "y" * 5000, "stderr": ""}),
+        ToolResult(
+            True,
+            output="OUTPUT_HEAD" + "x" * 5000 + "OUTPUT_TAIL",
+            data={"stdout": "STDOUT_HEAD" + "y" * 5000 + "STDOUT_TAIL", "stderr": ""},
+        ),
     )
     payload = json.loads(context.messages[-1]["content"])
     assert payload["success"] is True
     assert payload["data"]["truncated_by_context"] is True
+    assert payload["output"].startswith("OUTPUT_HEAD")
+    assert payload["output"].endswith("OUTPUT_TAIL")
+    assert payload["data"]["stdout"].startswith("STDOUT_HEAD")
+    assert payload["data"]["stdout"].endswith("STDOUT_TAIL")

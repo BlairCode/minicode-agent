@@ -45,22 +45,37 @@ class ContextManager:
         ]
         self.messages.append({"role": "assistant", "content": text or None, "tool_calls": tool_calls})
 
+    @staticmethod
+    def _truncate_text(value: Any, limit: int) -> str:
+        text = str(value or "")
+        if len(text) <= limit:
+            return text
+        marker = "\n... [truncated by context] ...\n"
+        if limit <= len(marker) + 2:
+            return text[:limit]
+        remaining = limit - len(marker)
+        head = remaining // 2
+        tail = remaining - head
+        return text[:head] + marker + text[-tail:]
+
     def add_tool_result(self, call: ToolCall, result: ToolResult) -> None:
         payload = result.to_dict()
         content = json.dumps(payload, ensure_ascii=False, default=str)
         if len(content) > self.max_tool_result_chars:
             limit = max(100, self.max_tool_result_chars // 4)
-            payload["output"] = str(payload.get("output", ""))[:limit] + "... [truncated]"
+            payload["output"] = self._truncate_text(payload.get("output", ""), limit)
             data = payload.get("data", {})
             if isinstance(data, dict):
                 for key in ("stdout", "stderr"):
                     if key in data:
-                        data[key] = str(data[key])[:limit] + "... [truncated]"
+                        data[key] = self._truncate_text(data[key], limit)
                 data["truncated_by_context"] = True
             content = json.dumps(payload, ensure_ascii=False, default=str)
             if len(content) > self.max_tool_result_chars:
                 payload["data"] = {"truncated_by_context": True}
-                payload["output"] = str(payload["output"])[: max(80, self.max_tool_result_chars // 2)]
+                payload["output"] = self._truncate_text(
+                    payload["output"], max(80, self.max_tool_result_chars // 2)
+                )
                 content = json.dumps(payload, ensure_ascii=False, default=str)
         self.messages.append(
             {"role": "tool", "tool_call_id": call.id, "name": call.name, "content": content}
