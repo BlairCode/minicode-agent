@@ -7,6 +7,7 @@ import pytest
 from minicode_agent.app import Application
 from minicode_agent.agent.state import AgentState
 from minicode_agent.config import ConfigError
+from minicode_agent.llm.client import ModelError
 from minicode_agent.llm.types import ModelResponse, ToolCall
 
 from conftest import ScriptedLLM
@@ -66,6 +67,39 @@ def test_runtime_stops_at_tool_error_limit(config) -> None:
     run = app.create_runtime("coding", interactive=False, record_sessions=False).run("Use a bad tool")
     assert run.state is AgentState.MAX_TOOL_ERRORS
     assert run.tool_errors == 2
+
+
+def test_cancellation_interrupts_model_retry_backoff(config) -> None:
+    class FailingLLM:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(self, _messages, _tools) -> ModelResponse:
+            self.calls += 1
+            raise ModelError("temporary provider failure")
+
+    config.model.max_retries = 3
+    config.agent.retry_base_seconds = 30
+    model = FailingLLM()
+    runtime_ref = {}
+
+    def cancel_on_retry(event: str, _payload: dict) -> None:
+        if event == "model_retry":
+            runtime_ref["runtime"].cancel()
+
+    app = Application(config, project_root=Path(__file__).resolve().parents[1], llm=model)
+    runtime = app.create_runtime(
+        "coding",
+        interactive=False,
+        record_sessions=False,
+        event_handler=cancel_on_retry,
+    )
+    runtime_ref["runtime"] = runtime
+    run = runtime.run("Trigger one retry, then cancel")
+
+    assert run.state is AgentState.CANCELLED
+    assert run.stop_reason == "cancelled by user"
+    assert model.calls == 1
 
 
 def test_both_agents_share_runtime_class(config) -> None:

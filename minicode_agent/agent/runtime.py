@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
 from threading import Event
 
@@ -65,6 +64,8 @@ class AgentRuntime:
     def _complete_with_retry(self) -> ModelResponse:
         last_error: ModelError | None = None
         for attempt in range(self.model_retries + 1):
+            if self.cancel_event.is_set():
+                break
             try:
                 return self.llm.complete(
                     self.context.build(),
@@ -76,9 +77,9 @@ class AgentRuntime:
                     break
                 delay = self.retry_base_seconds * (2**attempt)
                 self._emit("model_retry", {"attempt": attempt + 1, "delay_seconds": delay, "error": str(exc)})
-                if delay:
-                    time.sleep(delay)
-        raise last_error or ModelError("model request failed")
+                if delay and self.cancel_event.wait(delay):
+                    break
+        raise last_error or ModelError("model request cancelled")
 
     def step(self, run: AgentRun) -> bool:
         run.steps += 1
@@ -86,6 +87,10 @@ class AgentRuntime:
         try:
             response = self._complete_with_retry()
         except ModelError as exc:
+            if self.cancel_event.is_set():
+                run.state = AgentState.CANCELLED
+                run.stop_reason = "cancelled by user"
+                return True
             run.state = AgentState.FAILED
             run.stop_reason = str(exc)
             self._emit("model_error", {"error": str(exc)})
