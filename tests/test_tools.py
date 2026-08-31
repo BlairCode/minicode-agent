@@ -7,7 +7,12 @@ from minicode_agent.llm.types import ToolCall
 from minicode_agent.safety import ApprovalManager, CommandPolicy, PathPolicy
 from minicode_agent.tools.command import RunCommandTool
 from minicode_agent.tools.dispatcher import ToolDispatcher
-from minicode_agent.tools.filesystem import PatchFileTool, ReadFileTool, WriteFileTool
+from minicode_agent.tools.filesystem import (
+    PatchFileTool,
+    ReadFileTool,
+    SearchFilesTool,
+    WriteFileTool,
+)
 from minicode_agent.tools.registry import ToolRegistry
 
 
@@ -64,3 +69,21 @@ def test_write_size_limit_is_enforced(tmp_path: Path) -> None:
     )
     assert not result.success
     assert not (tmp_path / "large.txt").exists()
+
+
+def test_search_glob_can_match_relative_paths(tmp_path: Path) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / "app.py").write_text("TARGET = True\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_app.py").write_text("TARGET = True\n", encoding="utf-8")
+    tool = SearchFilesTool(PathPolicy(tmp_path))
+
+    result = tool.call({"query": "TARGET", "glob": "src/*.py"})
+
+    assert result.success
+    assert "src/app.py:1" in result.output
+    assert "tests/test_app.py" not in result.output
+
+    windows_style = tool.call({"query": "TARGET", "glob": "src\\*.py"})
+    assert windows_style.success
+    assert "src/app.py:1" in windows_style.output

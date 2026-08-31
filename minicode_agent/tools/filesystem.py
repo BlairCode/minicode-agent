@@ -253,7 +253,11 @@ class SearchFilesTool(FilesystemTool):
         "properties": {
             "query": {"type": "string"},
             "path": {"type": "string", "default": "."},
-            "glob": {"type": "string", "default": "*"},
+            "glob": {
+                "type": "string",
+                "default": "*",
+                "description": "Filename or search-root-relative path glob",
+            },
             "regex": {"type": "boolean", "default": False},
             "case_sensitive": {"type": "boolean", "default": False},
             "max_results": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100},
@@ -281,14 +285,18 @@ class SearchFilesTool(FilesystemTool):
             pattern = re.compile(query if regex else re.escape(query), flags)
         except re.error as exc:
             return ToolResult(False, error=f"invalid regex: {exc}")
+        normalized_glob = glob.replace("\\", "/")
         matches: list[str] = []
         skipped = 0
         for current, directories, files in os.walk(root, followlinks=False):
             directories[:] = sorted(item for item in directories if item not in {".git", ".minicode"})
             for name in sorted(files):
-                if not fnmatch.fnmatch(name, glob):
-                    continue
                 candidate = Path(current) / name
+                relative = candidate.relative_to(root).as_posix()
+                if not fnmatch.fnmatch(name, normalized_glob) and not fnmatch.fnmatch(
+                    relative, normalized_glob
+                ):
+                    continue
                 try:
                     candidate = self.path_policy.resolve(str(candidate), must_exist=True, expect_directory=False)
                     if candidate.stat().st_size > self.max_read_bytes:
