@@ -54,3 +54,14 @@ def test_history_repository_reads_external_jsonl(tmp_path) -> None:
     sessions = history.list_sessions()
     assert sessions[0]["task"] == "Fix calculator"
     assert sessions[0]["state"] == "COMPLETED"
+
+
+def test_history_repository_rejects_invalid_ids_and_damaged_utf8(tmp_path) -> None:
+    history = HistoryRepository(tmp_path)
+    history.session_dir.mkdir(parents=True)
+    damaged_id = "b" * 32
+    (history.session_dir / f"{damaged_id}.jsonl").write_bytes(b"\xff\xfe")
+
+    assert history.load("abc") == []
+    assert history.load("g" * 32) == []
+    assert history.load(damaged_id) == []

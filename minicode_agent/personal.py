@@ -176,7 +176,11 @@ class HistoryRepository:
         if not self.session_dir.exists():
             return []
         sessions: list[dict[str, Any]] = []
-        paths = sorted(self.session_dir.glob("*.jsonl"), key=lambda path: path.stat().st_mtime, reverse=True)
+        try:
+            paths = list(self.session_dir.glob("*.jsonl"))
+        except OSError:
+            return []
+        paths.sort(key=self._modified_time, reverse=True)
         for path in paths[:limit]:
             events = self.load(path.stem)
             started = next((item for item in events if item.get("event") == "run_started"), None)
@@ -196,14 +200,27 @@ class HistoryRepository:
             )
         return sessions
 
+    @staticmethod
+    def _modified_time(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
     def load(self, session_id: str) -> list[dict[str, Any]]:
-        if not session_id or any(char not in "0123456789abcdef" for char in session_id.lower()):
+        if len(session_id) != 32 or any(
+            char not in "0123456789abcdef" for char in session_id.lower()
+        ):
             return []
         path = self.session_dir / f"{session_id}.jsonl"
         if not path.is_file():
             return []
         events: list[dict[str, Any]] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            return []
+        for line in lines:
             try:
                 item = json.loads(line)
             except json.JSONDecodeError:
