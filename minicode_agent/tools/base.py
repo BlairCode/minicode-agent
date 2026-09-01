@@ -57,13 +57,26 @@ class BaseTool(ABC):
             "object": dict,
         }
         for key, value in arguments.items():
-            expected = properties.get(key, {}).get("type")
+            rules = properties.get(key, {})
+            expected = rules.get("type")
             if expected in type_map:
                 expected_type = type_map[expected]
-                if expected == "integer" and isinstance(value, bool):
-                    return f"argument '{key}' must be an integer"
+                if expected in {"integer", "number"} and isinstance(value, bool):
+                    return f"argument '{key}' must be {expected}"
                 if not isinstance(value, expected_type):
                     return f"argument '{key}' must be {expected}"
+            if "enum" in rules and value not in rules["enum"]:
+                return f"argument '{key}' must be one of: {', '.join(map(str, rules['enum']))}"
+            if expected in {"integer", "number"}:
+                if "minimum" in rules and value < rules["minimum"]:
+                    return f"argument '{key}' must be at least {rules['minimum']}"
+                if "maximum" in rules and value > rules["maximum"]:
+                    return f"argument '{key}' must be at most {rules['maximum']}"
+            if expected == "string":
+                if "minLength" in rules and len(value) < rules["minLength"]:
+                    return f"argument '{key}' is too short"
+                if "maxLength" in rules and len(value) > rules["maxLength"]:
+                    return f"argument '{key}' is too long"
         return None
 
     def call(self, arguments: dict[str, Any]) -> ToolResult:
@@ -81,4 +94,3 @@ class BaseTool(ABC):
     @abstractmethod
     def execute(self, **kwargs: Any) -> ToolResult:
         raise NotImplementedError
-

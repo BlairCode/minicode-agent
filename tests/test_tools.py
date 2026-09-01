@@ -8,6 +8,7 @@ from minicode_agent.safety import ApprovalManager, CommandPolicy, PathPolicy
 from minicode_agent.tools.command import RunCommandTool
 from minicode_agent.tools.dispatcher import ToolDispatcher
 from minicode_agent.tools.filesystem import (
+    ListDirectoryTool,
     PatchFileTool,
     ReadFileTool,
     SearchFilesTool,
@@ -61,6 +62,17 @@ def test_tool_argument_type_error_does_not_raise(tmp_path: Path) -> None:
     result = ReadFileTool(PathPolicy(tmp_path)).call({"path": 123})
     assert not result.success
     assert "must be string" in (result.error or "")
+
+
+def test_tool_schema_numeric_bounds_are_enforced_before_execution(tmp_path: Path) -> None:
+    policy = PathPolicy(tmp_path)
+    below_minimum = ReadFileTool(policy).call({"path": "missing.txt", "start_line": 0})
+    above_maximum = ListDirectoryTool(policy).call({"path": ".", "max_depth": 6})
+    boolean_number = ReadFileTool(policy).call({"path": "missing.txt", "start_line": True})
+
+    assert below_minimum.error == "argument 'start_line' must be at least 1"
+    assert above_maximum.error == "argument 'max_depth' must be at most 5"
+    assert boolean_number.error == "argument 'start_line' must be integer"
 
 
 def test_write_size_limit_is_enforced(tmp_path: Path) -> None:
