@@ -150,6 +150,17 @@ def _read_yaml(path: Path, *, required: bool) -> dict[str, Any]:
     return value
 
 
+def _environment_number(name: str, cast: type[int] | type[float]) -> int | float | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    try:
+        return cast(raw)
+    except ValueError as exc:
+        expected = "an integer" if cast is int else "a number"
+        raise ConfigError(f"{name} must be {expected}") from exc
+
+
 def _section(cls: type, values: Mapping[str, Any] | None):
     if values is not None and not isinstance(values, Mapping):
         raise ConfigError(f"{cls.__name__} configuration must be a mapping")
@@ -181,6 +192,14 @@ def load_config(
         env_overrides.setdefault("workspace", {})["root"] = workspace
     if mode := os.getenv("MINICODE_COMMAND_MODE"):
         env_overrides.setdefault("security", {})["command_mode"] = mode.lower()
+    if (request_timeout := _environment_number("MINICODE_REQUEST_TIMEOUT", float)) is not None:
+        env_overrides.setdefault("model", {})["request_timeout"] = request_timeout
+    if (max_steps := _environment_number("MINICODE_MAX_STEPS", int)) is not None:
+        env_overrides.setdefault("agent", {})["max_steps"] = max_steps
+    if (context_budget := _environment_number("MINICODE_CONTEXT_CHAR_BUDGET", int)) is not None:
+        env_overrides.setdefault("agent", {})["context_char_budget"] = context_budget
+    if (command_timeout := _environment_number("MINICODE_COMMAND_TIMEOUT", float)) is not None:
+        env_overrides.setdefault("security", {})["command_timeout"] = command_timeout
     data = _merge(data, env_overrides)
 
     allowed_sections = {
