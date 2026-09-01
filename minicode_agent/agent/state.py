@@ -24,6 +24,7 @@ class AgentRun:
     steps: int = 0
     tool_calls: int = 0
     tool_errors: int = 0
+    consecutive_tool_errors: int = 0
     final_response: str = ""
     stop_reason: str = ""
     session_id: str = field(default_factory=lambda: uuid4().hex)
@@ -38,4 +39,3 @@ class AgentRun:
             AgentState.MAX_TOOL_ERRORS,
             AgentState.CANCELLED,
         }
-

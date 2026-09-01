@@ -115,6 +115,9 @@ class AgentRuntime:
                 self._emit("tool_recorded", {"name": call.name, "success": result.success, "fatal": result.fatal})
                 if not result.success:
                     run.tool_errors += 1
+                    run.consecutive_tool_errors += 1
+                else:
+                    run.consecutive_tool_errors = 0
                 if result.fatal:
                     run.state = AgentState.FAILED
                     run.stop_reason = f"fatal tool error in {call.name}: {result.error}"
@@ -177,6 +180,7 @@ class AgentRuntime:
                 "steps": run.steps,
                 "tool_calls": run.tool_calls,
                 "tool_errors": run.tool_errors,
+                "consecutive_tool_errors": run.consecutive_tool_errors,
                 "reason": run.stop_reason,
             },
         )

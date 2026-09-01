@@ -15,13 +15,12 @@ class StopPolicy:
             run.state = AgentState.CANCELLED
             run.stop_reason = "cancelled by user"
             return True
-        if run.tool_errors >= self.max_tool_errors:
+        if run.consecutive_tool_errors >= self.max_tool_errors:
             run.state = AgentState.MAX_TOOL_ERRORS
-            run.stop_reason = f"maximum tool errors reached ({self.max_tool_errors})"
+            run.stop_reason = f"maximum consecutive tool errors reached ({self.max_tool_errors})"
             return True
         if run.steps >= self.max_steps:
             run.state = AgentState.MAX_STEPS
             run.stop_reason = f"maximum steps reached ({self.max_steps})"
             return True
         return False
-

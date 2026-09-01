@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 
 import pytest
@@ -67,6 +68,26 @@ def test_runtime_stops_at_tool_error_limit(config) -> None:
     run = app.create_runtime("coding", interactive=False, record_sessions=False).run("Use a bad tool")
     assert run.state is AgentState.MAX_TOOL_ERRORS
     assert run.tool_errors == 2
+    assert run.consecutive_tool_errors == 2
+
+
+def test_successful_tool_call_resets_consecutive_error_limit(config) -> None:
+    config.agent.max_tool_errors = 2
+    model = ScriptedLLM(
+        [
+            ModelResponse(tool_calls=[ToolCall("1", "missing", {})]),
+            ModelResponse(tool_calls=[ToolCall("2", "list_directory", {"path": "."})]),
+            ModelResponse(tool_calls=[ToolCall("3", "missing", {})]),
+            ModelResponse(text="Recovered after separate tool errors."),
+        ]
+    )
+    app = Application(config, project_root=Path(__file__).resolve().parents[1], llm=model)
+
+    run = app.create_runtime("coding", interactive=False, record_sessions=False).run("Recover")
+
+    assert run.state is AgentState.COMPLETED
+    assert run.tool_errors == 2
+    assert run.consecutive_tool_errors == 1
 
 
 def test_cancellation_interrupts_model_retry_backoff(config) -> None:
@@ -109,6 +130,9 @@ def test_both_agents_share_runtime_class(config) -> None:
     leetcode = app.create_runtime("leetcode", interactive=False, record_sessions=False)
     assert type(coding) is type(leetcode)
     assert coding.spec.name != leetcode.spec.name
+    system_prompt = coding.context.messages[0]["content"]
+    assert f"platform={platform.system()}" in system_prompt
+    assert "shell=False" in system_prompt
 
 
 def test_runtime_workspace_override_cannot_escape_base(config, tmp_path: Path) -> None:
