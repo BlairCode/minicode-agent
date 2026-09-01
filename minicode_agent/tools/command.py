@@ -29,6 +29,32 @@ def _sanitized_environment() -> dict[str, str]:
     }
 
 
+def _resolve_workspace_executable(
+    argv: tuple[str, ...],
+    working_directory: Path,
+    workspace: Path,
+) -> list[str]:
+    """Resolve a workspace-local executable before creating the process."""
+    resolved = list(argv)
+    executable = Path(resolved[0])
+    if executable.is_absolute():
+        return resolved
+
+    candidates = [executable]
+    if os.name == "nt" and not executable.suffix:
+        candidates.append(Path(f"{executable}.exe"))
+    for candidate in candidates:
+        local = (working_directory / candidate).resolve()
+        try:
+            local.relative_to(workspace)
+        except ValueError:
+            continue
+        if local.is_file():
+            resolved[0] = str(local)
+            break
+    return resolved
+
+
 def _terminate_tree(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -48,7 +74,10 @@ def _terminate_tree(process: subprocess.Popen[str]) -> None:
 
 class RunCommandTool(BaseTool):
     name = "run_command"
-    description = "Run one local development command without a shell and return structured output."
+    description = (
+        "Run one platform-compatible local development command with shell=False and return "
+        "structured output. Shell built-ins, operators, and redirection are unavailable."
+    )
     parameters = {
         "type": "object",
         "properties": {
@@ -91,9 +120,14 @@ class RunCommandTool(BaseTool):
 
         started = time.perf_counter()
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        argv = _resolve_workspace_executable(
+            decision.argv,
+            working_directory,
+            self.path_policy.workspace,
+        )
         try:
             process = subprocess.Popen(
-                list(decision.argv),
+                argv,
                 cwd=working_directory,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -104,6 +138,14 @@ class RunCommandTool(BaseTool):
                 env=_sanitized_environment(),
                 start_new_session=os.name != "nt",
                 creationflags=creation_flags,
+            )
+        except FileNotFoundError:
+            executable = decision.argv[0]
+            cwd_display = self.path_policy.display(working_directory)
+            return ToolResult(
+                False,
+                error=f"executable not found: {executable} (platform={os.name}, cwd={cwd_display})",
+                data=base_data,
             )
         except (OSError, ValueError) as exc:
             return ToolResult(False, error=f"cannot start command: {exc}", data=base_data)
@@ -142,4 +184,3 @@ class RunCommandTool(BaseTool):
         if stderr:
             summary_parts.append(f"stderr:\n{stderr}")
         return ToolResult(success, output="\n".join(summary_parts), error=error, data=data)
-

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from minicode_agent.llm.types import ToolCall
 from minicode_agent.safety import ApprovalManager, CommandPolicy, PathPolicy
-from minicode_agent.tools.command import RunCommandTool
+from minicode_agent.tools.command import RunCommandTool, _resolve_workspace_executable
 from minicode_agent.tools.dispatcher import ToolDispatcher
 from minicode_agent.tools.filesystem import (
     ListDirectoryTool,
@@ -56,6 +56,15 @@ def test_command_timeout_returns_structured_result(tmp_path: Path) -> None:
     assert not result.success
     assert result.data["timed_out"] is True
     assert "timed out" in (result.error or "")
+
+
+def test_workspace_local_executable_is_resolved_before_launch(tmp_path: Path) -> None:
+    executable = tmp_path / "test_calculator.exe"
+    executable.write_bytes(b"binary fixture")
+
+    argv = _resolve_workspace_executable(("test_calculator.exe",), tmp_path, tmp_path)
+
+    assert Path(argv[0]) == executable.resolve()
 
 
 def test_tool_argument_type_error_does_not_raise(tmp_path: Path) -> None:

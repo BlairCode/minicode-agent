@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import platform
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,6 +25,22 @@ from minicode_agent.tools.filesystem import (
     WriteFileTool,
 )
 from minicode_agent.tools.registry import ToolRegistry
+
+
+def _runtime_environment_prompt() -> str:
+    platform_name = platform.system() or os.name
+    if os.name == "nt":
+        command_guidance = (
+            "Use Windows-compatible executables; do not use POSIX-only commands such as rm. "
+            "Workspace-built .exe files may be invoked by relative path."
+        )
+    else:
+        command_guidance = "Use POSIX-compatible executables and paths."
+    return (
+        f"Runtime environment: platform={platform_name}, os.name={os.name}. "
+        "Commands are parsed into argv and executed with shell=False, so shell built-ins, "
+        f"operators, redirection, and command chaining are unavailable. {command_guidance}"
+    )
 
 
 class Application:
@@ -131,6 +149,7 @@ class Application:
         registry = ToolRegistry(tools)
         dispatcher = ToolDispatcher(registry, route_event)
         base_prompt = (self.project_root / "prompts" / "base.md").read_text(encoding="utf-8")
+        base_prompt += "\n\n" + _runtime_environment_prompt()
         context = ContextManager(
             base_prompt,
             spec.system_prompt,
