@@ -27,6 +27,7 @@ MiniCode Agent 将模型决策与本地执行分开：Qwen 选择下一步动作
 
 - **两种工作模式**：Coding 处理常规代码任务，LeetCode 提供解题、提示、面试和复盘模式。
 - **完整工具闭环**：支持文件读取、写入、精确补丁、目录查看、文本搜索和无 Shell 命令执行。
+- **明确工具契约**：Runtime 在执行前检查参数类型、枚举和数值边界；路径 glob 同时兼容两种分隔符。
 - **可见的执行过程**：网页为每一步提供简短任务说明，并展示工具参数摘要、命令结果、Markdown 回答和输出文件。
 - **连续对话**：同一会话可追问并复用上下文；每个会话使用独立工作区。
 - **本地数据隔离**：历史与偏好存放在仓库外，API Key 交由操作系统凭据库管理。
@@ -133,6 +134,8 @@ python main.py --config config/user.yaml
 | `security.network_access` | `false` | 是否允许工具命令访问网络 |
 | `ui.web_port` | `8765` | 本地网页端口 |
 
+模型名、工作区和命令模式可通过 `MINICODE_MODEL`、`MINICODE_WORKSPACE`、`MINICODE_COMMAND_MODE` 临时覆盖。无人值守或脚本化启动还可使用 `MINICODE_REQUEST_TIMEOUT`、`MINICODE_MAX_STEPS`、`MINICODE_CONTEXT_CHAR_BUDGET` 和 `MINICODE_COMMAND_TIMEOUT`。数值非法或越界时程序会在启动阶段直接报错。
+
 也可以只为当前终端提供凭据：
 
 ```powershell
@@ -167,7 +170,7 @@ node --check minicode_agent/web/static/app.js
 python -m pytest
 ```
 
-当前测试覆盖 Agent Loop、上下文裁剪、Qwen Tool Calling、文件边界、命令策略、审批、超时、会话脱敏、多轮对话和本地 HTTP 安全头。
+当前 64 项离线测试覆盖 Agent Loop、可取消重试、上下文裁剪、Qwen Tool Calling、工具 Schema 边界、路径 glob、文件边界、命令策略、审批、超时、损坏历史降级、会话脱敏、多轮对话和本地 HTTP 安全头。
 
 ## License
 
