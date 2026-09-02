@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import threading
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +22,20 @@ from minicode_agent.personal import (
 )
 from minicode_agent.safety import PathPolicy
 from minicode_agent.session import redact
+from minicode_agent.tools.filesystem import WriteFileTool
+
+
+MAX_UPLOAD_FILES = 10
+MAX_UPLOAD_TOTAL_BYTES = 4_000_000
+
+
+def open_directory(path: Path) -> None:
+    """Open a local directory with the platform file manager."""
+    if sys.platform == "win32":
+        os.startfile(str(path))
+        return
+    command = ["open", str(path)] if sys.platform == "darwin" else ["xdg-open", str(path)]
+    subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def public_tool_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -145,6 +161,63 @@ class WebController:
     def _credential(self) -> str | None:
         return self.credential_store.get(self.config.model.provider) if self.credential_store else None
 
+    def _normalize_uploads(self, uploads: Any) -> list[dict[str, str]]:
+        if uploads in (None, []):
+            return []
+        if not isinstance(uploads, list):
+            raise ValueError("files must be a list")
+        if len(uploads) > MAX_UPLOAD_FILES:
+            raise ValueError(f"at most {MAX_UPLOAD_FILES} files can be uploaded at once")
+        normalized: list[dict[str, str]] = []
+        names: set[str] = set()
+        total_bytes = 0
+        for item in uploads:
+            if not isinstance(item, dict):
+                raise ValueError("each uploaded file must be an object")
+            name = item.get("name")
+            content = item.get("content")
+            if not isinstance(name, str) or not name or name in {".", ".."}:
+                raise ValueError("uploaded file name is invalid")
+            if (
+                "/" in name
+                or "\\" in name
+                or "\x00" in name
+                or any(ord(char) < 32 for char in name)
+                or name.endswith((" ", "."))
+                or Path(name).name != name
+                or PureWindowsPath(name).is_reserved()
+            ):
+                raise ValueError("uploaded files must use plain file names")
+            if not isinstance(content, str):
+                raise ValueError(f"uploaded file {name} must contain UTF-8 text")
+            encoded_size = len(content.encode("utf-8"))
+            if encoded_size > self.config.workspace.max_read_bytes:
+                raise ValueError(f"uploaded file {name} exceeds the per-file size limit")
+            total_bytes += encoded_size
+            if total_bytes > MAX_UPLOAD_TOTAL_BYTES:
+                raise ValueError("uploaded files exceed the total size limit")
+            canonical_name = name.casefold()
+            if canonical_name in names:
+                raise ValueError(f"duplicate uploaded file name: {name}")
+            names.add(canonical_name)
+            normalized.append({"name": name, "content": content})
+        return normalized
+
+    def _store_uploads(self, workspace: Path, uploads: list[dict[str, str]]) -> list[str]:
+        if not uploads:
+            return []
+        policy = PathPolicy(workspace)
+        targets = [policy.resolve(item["name"], must_exist=False, expect_directory=False) for item in uploads]
+        for item, target in zip(uploads, targets, strict=True):
+            if target.exists():
+                raise ValueError(f"uploaded file already exists: {item['name']}")
+        writer = WriteFileTool(policy, max_read_bytes=self.config.workspace.max_read_bytes)
+        for item in uploads:
+            result = writer.execute(item["name"], item["content"], overwrite=False)
+            if not result.success:
+                raise ValueError(result.error or f"could not store uploaded file {item['name']}")
+        return [item["name"] for item in uploads]
+
     @staticmethod
     def _valid_conversation_id(value: str) -> bool:
         return len(value) == 32 and all(char in "0123456789abcdef" for char in value.lower())
@@ -222,13 +295,20 @@ class WebController:
             self.runs[conversation_id] = conversation
         return conversation
 
-    def start_run(self, task: str, agent: str, conversation_id: str = "") -> dict[str, Any]:
+    def start_run(
+        self,
+        task: str,
+        agent: str,
+        conversation_id: str = "",
+        files: Any = None,
+    ) -> dict[str, Any]:
         if not isinstance(task, str) or not task.strip():
             raise ValueError("task cannot be empty")
         if len(task) > 100_000:
             raise ValueError("task is too large")
         if agent not in {"coding", "leetcode"}:
             raise ValueError("unknown agent")
+        uploads = self._normalize_uploads(files)
         if conversation_id:
             with self.lock:
                 conversation = self.runs.get(conversation_id)
@@ -247,6 +327,8 @@ class WebController:
         with conversation.lock:
             if conversation.status == "RUNNING":
                 raise ValueError("conversation is already running")
+            workspace_initially_empty = not any(conversation.workspace.iterdir())
+            uploaded_files = self._store_uploads(conversation.workspace, uploads)
             baseline = conversation.events[-1]["seq"] if conversation.events else -1
             conversation.status = "RUNNING"
             conversation.turn_count += 1
@@ -262,7 +344,12 @@ class WebController:
                 result = conversation.runtime.run(
                     task,
                     session_id=conversation_id,
-                    metadata={"workspace_id": conversation_id, "turn": turn_number},
+                    metadata={
+                        "workspace_id": conversation_id,
+                        "turn": turn_number,
+                        "workspace_initially_empty": turn_number == 1 and workspace_initially_empty,
+                        "uploaded_files": uploaded_files,
+                    },
                 )
                 with conversation.lock:
                     conversation.status = result.state.value
@@ -283,7 +370,7 @@ class WebController:
                 conversation.add("run_complete", {"state": "FAILED", "response": "", "reason": f"{type(exc).__name__}: {exc}"})
 
         threading.Thread(target=work, name=f"minicode-web-{conversation_id[:8]}", daemon=True).start()
-        return {"id": conversation_id, "after": baseline, "turn": turn_number}
+        return {"id": conversation_id, "after": baseline, "turn": turn_number, "uploaded_files": uploaded_files}
 
     def run_events(self, run_id: str, after: int) -> dict[str, Any]:
         with self.lock:
@@ -325,18 +412,25 @@ class WebController:
             safe.append(redact(copy))
         return safe
 
-    def preview_file(self, value: str, workspace_id: str = "") -> dict[str, Any]:
+    def _workspace_policy(self, workspace_id: str = "") -> PathPolicy:
         workspace = self.app.workspace
         if workspace_id:
             with self.lock:
                 active_run = self.runs.get(workspace_id)
             if active_run:
                 workspace = active_run.workspace
-            elif len(workspace_id) == 32 and all(char in "0123456789abcdef" for char in workspace_id.lower()):
+            elif self._valid_conversation_id(workspace_id):
                 historical_workspace = self.app.workspace / workspace_id
                 if historical_workspace.is_dir():
                     workspace = historical_workspace
-        policy = PathPolicy(workspace)
+                else:
+                    raise KeyError("conversation workspace not found")
+            else:
+                raise KeyError("conversation workspace not found")
+        return PathPolicy(workspace)
+
+    def preview_file(self, value: str, workspace_id: str = "") -> dict[str, Any]:
+        policy = self._workspace_policy(workspace_id)
         path = policy.resolve(value, must_exist=True, expect_directory=False)
         if path.stat().st_size > 500_000:
             raise ValueError("file is too large to preview")
@@ -345,3 +439,9 @@ class WebController:
             raise ValueError("binary files cannot be previewed")
         content = raw.decode("utf-8")
         return {"path": policy.display(path), "content": content}
+
+    def open_file_location(self, value: str, workspace_id: str = "") -> dict[str, Any]:
+        policy = self._workspace_policy(workspace_id)
+        path = policy.resolve(value, must_exist=True, expect_directory=False)
+        open_directory(path.parent)
+        return {"opened": True, "path": policy.display(path)}

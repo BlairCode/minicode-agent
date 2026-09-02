@@ -23,6 +23,7 @@ STATIC_TYPES = {
     ".png": "image/png",
 }
 SESSION_TOKEN_MARKER = b"__MINICODE_SESSION_TOKEN__"
+MAX_JSON_BODY_BYTES = 6_000_000
 
 
 class LocalWebServer(ThreadingHTTPServer):
@@ -89,7 +90,7 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError as exc:
             raise ValueError("invalid content length") from exc
-        if length < 0 or length > 1_000_000:
+        if length < 0 or length > MAX_JSON_BODY_BYTES:
             raise ValueError("request body is too large")
         raw = self.rfile.read(length)
         if not raw:
@@ -184,8 +185,16 @@ class LocalRequestHandler(BaseHTTPRequestHandler):
                 str(payload.get("task", "")),
                 str(payload.get("agent", "coding")),
                 str(payload.get("conversation_id", "")),
+                payload.get("files", []),
             )
             self._json(HTTPStatus.ACCEPTED, result)
+            return
+        if path == "/api/file/open-location":
+            result = self.server.controller.open_file_location(
+                str(payload.get("path", "")),
+                str(payload.get("workspace_id", "")),
+            )
+            self._json(HTTPStatus.OK, result)
             return
         if path.startswith("/api/runs/") and path.endswith("/cancel"):
             run_id = path.split("/")[-2]

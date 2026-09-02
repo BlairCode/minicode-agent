@@ -9,8 +9,10 @@ const state = {
   pollAfter: -1,
   pollTimer: null,
   running: false,
+  preparing: false,
   pendingApproval: null,
   outputPaths: new Set(),
+  pendingFiles: [],
   currentExecution: null,
   activeStep: null,
   activeAction: null,
@@ -33,6 +35,9 @@ const elements = {
   fileList: $("#file-list"),
   fileEmpty: $("#files-empty"),
   fileCount: $("#file-count"),
+  fileInput: $("#file-input"),
+  attachmentList: $("#attachment-list"),
+  chooseFiles: $("#choose-files"),
   settingsModal: $("#settings-modal"),
   settingsForm: $("#settings-form"),
   approvalModal: $("#approval-modal"),
@@ -91,6 +96,8 @@ function setRunning(value) {
   elements.send.disabled = value;
   elements.stop.hidden = !value;
   elements.agent.disabled = value;
+  elements.chooseFiles.disabled = value;
+  elements.fileInput.disabled = value;
   setAgentLocked(value || Boolean(state.conversationId));
   if (value) setStatus("running", "执行中");
 }
@@ -392,6 +399,7 @@ function handleEvent(item, historical = false) {
   const payload = item.payload || {};
   const timestamp = item.timestamp || "";
   if (name === "run_started") {
+    for (const path of payload.uploaded_files || []) addOutputFile(String(path), "upload");
     if (historical) {
       state.currentExecution = null;
       state.activeStep = null;
@@ -443,6 +451,7 @@ function resetView() {
   state.renderedFinal = false;
   state.pendingApproval = null;
   state.outputPaths.clear();
+  clearPendingFiles();
   elements.stream.replaceChildren();
   elements.fileList.replaceChildren();
   elements.fileEmpty.hidden = false;
@@ -477,34 +486,135 @@ function pathParts(path) {
 }
 
 function addOutputFile(path, action = "write_file") {
-  if (state.outputPaths.has(path)) return;
+  const labels = { patch_file: "已修改", upload: "已上传", write_file: "已创建" };
+  if (state.outputPaths.has(path)) {
+    const existing = [...elements.fileList.children].find((node) => node.dataset.path === path);
+    const status = existing?.querySelector(".file-copy small");
+    if (status) status.textContent = `${labels[action] || "文件"} · ${pathParts(path).parent}`;
+    return;
+  }
   state.outputPaths.add(path);
   elements.fileEmpty.hidden = true;
   elements.fileCount.textContent = String(state.outputPaths.size);
   const parts = pathParts(path);
+  const row = element("div", "file-item");
+  row.dataset.path = path;
   const button = element("button", "file-item");
   button.type = "button";
-  button.dataset.path = path;
+  button.className = "file-main";
   button.append(element("span", "file-kind", parts.ext));
   const copy = element("span", "file-copy");
-  copy.append(element("strong", "", parts.name), element("small", "", `${action === "patch_file" ? "已修改" : "已创建"} · ${parts.parent}`));
+  copy.append(element("strong", "", parts.name), element("small", "", `${labels[action] || "文件"} · ${parts.parent}`));
   button.append(copy, element("span", "file-arrow", "›"));
-  button.addEventListener("click", () => previewFile(path, button));
-  elements.fileList.append(button);
+  button.addEventListener("click", () => previewFile(path, row));
+  const location = element("button", "file-location", "📂");
+  location.type = "button";
+  location.title = "打开所在文件夹";
+  location.setAttribute("aria-label", `打开 ${parts.name} 所在文件夹`);
+  location.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openFileLocation(path);
+  });
+  row.append(button, location);
+  elements.fileList.append(row);
 }
 
-async function previewFile(path, button) {
+async function previewFile(path, row) {
   try {
     const workspace = state.fileWorkspaceId ? `&workspace_id=${encodeURIComponent(state.fileWorkspaceId)}` : "";
     const payload = await api(`/api/file?path=${encodeURIComponent(path)}${workspace}`);
     document.querySelectorAll(".file-item.active").forEach((node) => node.classList.remove("active"));
-    button.classList.add("active");
+    row.classList.add("active");
     $("#preview-name").textContent = payload.path;
     $("#preview-content").textContent = payload.content;
     $("#file-preview").hidden = false;
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+async function openFileLocation(path) {
+  try {
+    await api("/api/file/open-location", {
+      method: "POST",
+      body: JSON.stringify({ path, workspace_id: state.fileWorkspaceId || "" }),
+    });
+    toast("已打开文件所在文件夹");
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function renderPendingFiles() {
+  elements.attachmentList.replaceChildren();
+  for (const file of state.pendingFiles) {
+    const chip = element("span", "attachment-chip");
+    chip.append(element("span", "", `${file.name} · ${Math.max(1, Math.ceil(file.size / 1024))} KB`));
+    const remove = element("button", "", "×");
+    remove.type = "button";
+    remove.setAttribute("aria-label", `移除 ${file.name}`);
+    remove.addEventListener("click", () => {
+      state.pendingFiles = state.pendingFiles.filter((candidate) => candidate !== file);
+      renderPendingFiles();
+    });
+    chip.append(remove);
+    elements.attachmentList.append(chip);
+  }
+  elements.attachmentList.hidden = state.pendingFiles.length === 0;
+}
+
+function clearPendingFiles() {
+  state.pendingFiles = [];
+  elements.fileInput.value = "";
+  renderPendingFiles();
+}
+
+function selectFiles(fileList) {
+  const selected = [...fileList];
+  if (state.pendingFiles.length + selected.length > 10) {
+    toast("一次最多上传 10 个文件。", true);
+    elements.fileInput.value = "";
+    return;
+  }
+  const names = new Set(state.pendingFiles.map((file) => file.name.toLocaleLowerCase()));
+  for (const file of selected) {
+    if (!file.name || file.name.includes("/") || file.name.includes("\\") || [".", ".."].includes(file.name)) {
+      toast(`文件名无效：${file.name || "未命名文件"}`, true);
+      continue;
+    }
+    if (names.has(file.name.toLocaleLowerCase())) {
+      toast(`已选择同名文件：${file.name}`, true);
+      continue;
+    }
+    if (file.size > 1_000_000) {
+      toast(`${file.name} 超过 1 MB，未加入上传列表。`, true);
+      continue;
+    }
+    names.add(file.name.toLocaleLowerCase());
+    state.pendingFiles.push(file);
+  }
+  elements.fileInput.value = "";
+  renderPendingFiles();
+}
+
+async function uploadPayload() {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const files = [];
+  let totalBytes = 0;
+  for (const file of state.pendingFiles) {
+    const buffer = await file.arrayBuffer();
+    totalBytes += buffer.byteLength;
+    if (totalBytes > 4_000_000) throw new Error("待上传文件总大小不能超过 4 MB。");
+    let content;
+    try {
+      content = decoder.decode(buffer);
+    } catch (_) {
+      throw new Error(`${file.name} 不是有效的 UTF-8 文本文件。`);
+    }
+    if (content.includes("\u0000")) throw new Error(`${file.name} 似乎是二进制文件，无法上传。`);
+    files.push({ name: file.name, content });
+  }
+  return files;
 }
 
 async function pollRun() {
@@ -532,7 +642,19 @@ async function pollRun() {
 
 async function startRun() {
   const task = elements.input.value.trim();
-  if (!task || state.running) return;
+  if (!task || state.running || state.preparing) return;
+  state.preparing = true;
+  elements.send.disabled = true;
+  let files;
+  try {
+    files = await uploadPayload();
+  } catch (error) {
+    toast(error.message, true);
+    return;
+  } finally {
+    state.preparing = false;
+    if (!state.running) elements.send.disabled = false;
+  }
   state.currentExecution = null;
   state.activeStep = null;
   state.activeAction = null;
@@ -543,11 +665,15 @@ async function startRun() {
   resizeInput();
   setRunning(true);
   try {
-    const payload = await api("/api/runs", { method: "POST", body: JSON.stringify({ task, agent: elements.agent.value, conversation_id: state.conversationId || "" }) });
+    const payload = await api("/api/runs", {
+      method: "POST",
+      body: JSON.stringify({ task, agent: elements.agent.value, conversation_id: state.conversationId || "", files }),
+    });
     state.runId = payload.id;
     state.conversationId = payload.id;
     state.fileWorkspaceId = payload.id;
     state.pollAfter = Number.isInteger(payload.after) ? payload.after : -1;
+    clearPendingFiles();
     setAgentLocked(true);
     pollRun();
   } catch (error) {
@@ -707,6 +833,8 @@ function bindEvents() {
   elements.input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); startRun(); }
   });
+  $("#choose-files").addEventListener("click", () => elements.fileInput.click());
+  elements.fileInput.addEventListener("change", () => selectFiles(elements.fileInput.files));
   $("#new-chat").addEventListener("click", newConversation);
   $("#refresh-history").addEventListener("click", loadHistory);
   $("#open-settings").addEventListener("click", openSettings);

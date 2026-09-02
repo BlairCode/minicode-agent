@@ -167,7 +167,15 @@ kbd { font-family: inherit; font-size: 10px; padding: 2px 5px; border-radius: 5p
 .composer textarea { display: block; width: 100%; max-height: 150px; resize: none; border: 0; outline: 0; padding: 4px 5px 9px; color: var(--ink); background: transparent; font-size: 12px; line-height: 1.6; }
 .composer textarea::placeholder { color: #a5adba; }
 .composer-footer { border-top: 1px solid #edf0f4; padding-top: 8px; display: flex; align-items: center; justify-content: space-between; }
-.composer-footer > span { color: #a0a8b6; font-size: 9px; }
+.composer-meta { display: flex; align-items: center; gap: 10px; color: #a0a8b6; font-size: 9px; }
+.attachment-button { height: 28px; border: 1px solid #e2e6ed; border-radius: 8px; padding: 0 9px; background: #f8f9fc; color: #657087; font-size: 9px; font-weight: 700; }
+.attachment-button:hover { border-color: #cbd4e3; color: var(--ink); }
+.attachment-button:disabled { opacity: .5; cursor: not-allowed; }
+.attachment-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 8px; }
+.attachment-chip { max-width: 230px; display: flex; align-items: center; gap: 5px; border: 1px solid #dde4ef; border-radius: 8px; padding: 5px 6px 5px 8px; background: #f5f8ff; color: #58647a; font-size: 9px; }
+.attachment-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip button { flex: 0 0 auto; width: 18px; height: 18px; border: 0; border-radius: 5px; padding: 0; background: transparent; color: #8c96a8; }
+.attachment-chip button:hover { background: #e6ebf4; color: var(--ink); }
 .composer-actions { display: flex; gap: 7px; }
 .send-button, .stop-button, .primary-button, .secondary-button { border: 0; border-radius: 9px; min-height: 34px; padding: 0 14px; font-size: 11px; font-weight: 700; }
 .send-button, .primary-button { background: var(--blue); color: white; }
@@ -187,8 +195,11 @@ kbd { font-family: inherit; font-size: 10px; padding: 2px 5px; border-radius: 5p
 .files-empty strong { color: #687489; font-size: 11px; }
 .files-empty p { font-size: 9px; line-height: 1.65; }
 .file-list { padding: 10px 0; max-height: calc(100% - 70px); overflow-y: auto; }
-.file-item { width: 100%; display: grid; grid-template-columns: 33px minmax(0, 1fr) 20px; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 11px; padding: 9px 7px; text-align: left; background: transparent; color: inherit; }
+.file-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: 11px; padding: 3px; color: inherit; }
 .file-item:hover, .file-item.active { border-color: var(--line); background: #f8f9fc; }
+.file-main { min-width: 0; display: grid; grid-template-columns: 33px minmax(0, 1fr) 20px; align-items: center; gap: 9px; border: 0; padding: 6px 4px; text-align: left; background: transparent; color: inherit; }
+.file-location { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 7px; padding: 0; background: transparent; color: #8d97a8; font-size: 13px; }
+.file-location:hover { background: #e9edf4; color: var(--ink); }
 .file-kind { width: 33px; height: 33px; border-radius: 9px; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .file-copy { min-width: 0; }
 .file-copy strong { display: block; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

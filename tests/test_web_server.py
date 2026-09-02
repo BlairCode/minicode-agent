@@ -16,6 +16,7 @@ class FakeController:
     def __init__(self) -> None:
         self.history = FakeHistory()
         self.started = None
+        self.opened = None
 
     def bootstrap(self):
         return {
@@ -31,9 +32,13 @@ class FakeController:
     def preview_file(self, _path, _workspace_id=""):
         return {"path": "demo.py", "content": "pass\n"}
 
-    def start_run(self, task, agent, conversation_id=""):
-        self.started = (task, agent, conversation_id)
-        return {"id": conversation_id or "a" * 32, "after": 8, "turn": 2 if conversation_id else 1}
+    def start_run(self, task, agent, conversation_id="", files=None):
+        self.started = (task, agent, conversation_id, files or [])
+        return {"id": conversation_id or "a" * 32, "after": 8, "turn": 2 if conversation_id else 1, "uploaded_files": [item["name"] for item in files or []]}
+
+    def open_file_location(self, path, workspace_id=""):
+        self.opened = (path, workspace_id)
+        return {"opened": True, "path": path}
 
 
 def request(server, method: str, path: str, token: str | None = None, body: str | None = None):
@@ -115,8 +120,32 @@ def test_server_passes_conversation_id_to_follow_up_run() -> None:
         status, _, payload = request(server, "POST", "/api/runs", token, body)
 
         assert status == 202
-        assert json.loads(payload) == {"id": conversation_id, "after": 8, "turn": 2}
-        assert controller.started == ("继续完善", "coding", conversation_id)
+        assert json.loads(payload) == {"id": conversation_id, "after": 8, "turn": 2, "uploaded_files": []}
+        assert controller.started == ("继续完善", "coding", conversation_id, [])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_server_passes_uploads_and_open_location_request() -> None:
+    controller = FakeController()
+    server, token = create_server(controller, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        files = [{"name": "main.py", "content": "print('ok')\n"}]
+        body = json.dumps({"task": "检查文件", "agent": "coding", "files": files})
+        status, _, payload = request(server, "POST", "/api/runs", token, body)
+        assert status == 202
+        assert json.loads(payload)["uploaded_files"] == ["main.py"]
+        assert controller.started == ("检查文件", "coding", "", files)
+
+        location_body = json.dumps({"path": "main.py", "workspace_id": "d" * 32})
+        status, _, payload = request(server, "POST", "/api/file/open-location", token, location_body)
+        assert status == 200
+        assert json.loads(payload) == {"opened": True, "path": "main.py"}
+        assert controller.opened == ("main.py", "d" * 32)
     finally:
         server.shutdown()
         server.server_close()

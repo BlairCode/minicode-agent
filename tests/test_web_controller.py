@@ -99,11 +99,11 @@ def test_follow_up_reuses_conversation_context_and_workspace(config, tmp_path: P
     assert [path.name for path in controller.app.workspace.iterdir()] == [first["id"]]
     messages = controller.app.llm.calls[1][0]
     dialogue = [(item["role"], item.get("content")) for item in messages if item["role"] != "system"]
-    assert dialogue == [
-        ("user", "先创建一个基础版本"),
-        ("assistant", "第一轮回答"),
-        ("user", "继续完善它"),
-    ]
+    assert dialogue[0][0] == "user"
+    assert dialogue[0][1].startswith("先创建一个基础版本\n\n[Runtime workspace context]")
+    assert "do not call list_directory" in dialogue[0][1]
+    assert dialogue[1:] == [("assistant", "第一轮回答"), ("user", "继续完善它")]
+    assert "list_directory" in {item["function"]["name"] for item in controller.app.llm.calls[1][1]}
 
 
 def test_historical_conversation_can_resume_after_restart(config, tmp_path: Path) -> None:
@@ -152,6 +152,75 @@ def test_file_preview_uses_conversation_workspace(config, tmp_path: Path) -> Non
     assert controller.preview_file("result.txt", workspace_id)["content"] == "isolated"
     with pytest.raises(PermissionError):
         controller.preview_file("../visible.txt", workspace_id)
+
+
+def test_upload_is_isolated_and_only_file_name_reaches_model(config, tmp_path: Path) -> None:
+    secret_content = "PRIVATE_UPLOAD_CONTENT = 42\n"
+    controller = make_controller(config, tmp_path, [ModelResponse(text="已读取上传文件")])
+
+    response = controller.start_run(
+        "检查上传的配置",
+        "coding",
+        files=[{"name": "settings.toml", "content": secret_content}],
+    )
+    assert wait_for_run(controller, response["id"])["status"] == "COMPLETED"
+
+    workspace = controller.app.workspace / response["id"]
+    assert (workspace / "settings.toml").read_text(encoding="utf-8") == secret_content
+    user_message = next(item["content"] for item in controller.app.llm.calls[0][0] if item["role"] == "user")
+    assert "settings.toml" in user_message
+    assert secret_content.strip() not in user_message
+    session_text = (controller.history.session_dir / f"{response['id']}.jsonl").read_text(encoding="utf-8")
+    assert secret_content.strip() not in session_text
+    assert response["uploaded_files"] == ["settings.toml"]
+
+
+@pytest.mark.parametrize(
+    "files, message",
+    [
+        ([{"name": "../escape.py", "content": "pass\n"}], "plain file names"),
+        (
+            [{"name": "same.py", "content": "a"}, {"name": "SAME.py", "content": "b"}],
+            "duplicate uploaded file name",
+        ),
+    ],
+)
+def test_upload_rejects_unsafe_or_duplicate_names(config, tmp_path: Path, files, message: str) -> None:
+    controller = make_controller(config, tmp_path, [ModelResponse(text="done")])
+    with pytest.raises(ValueError, match=message):
+        controller.start_run("处理文件", "coding", files=files)
+
+
+def test_follow_up_upload_does_not_overwrite_existing_file(config, tmp_path: Path) -> None:
+    controller = make_controller(config, tmp_path, [ModelResponse(text="first")])
+    first = controller.start_run("开始", "coding", files=[{"name": "input.txt", "content": "original"}])
+    assert wait_for_run(controller, first["id"])["status"] == "COMPLETED"
+
+    with pytest.raises(ValueError, match="already exists"):
+        controller.start_run(
+            "继续",
+            "coding",
+            first["id"],
+            files=[{"name": "input.txt", "content": "replacement"}],
+        )
+    assert (controller.app.workspace / first["id"] / "input.txt").read_text(encoding="utf-8") == "original"
+
+
+def test_open_file_location_uses_conversation_workspace(config, tmp_path: Path, monkeypatch) -> None:
+    controller = make_controller(config, tmp_path, [ModelResponse(text="done")])
+    workspace_id = "c" * 32
+    workspace = controller.app.workspace / workspace_id
+    workspace.mkdir()
+    (workspace / "result.txt").write_text("safe", encoding="utf-8")
+    opened: list[Path] = []
+    monkeypatch.setattr("minicode_agent.web.controller.open_directory", opened.append)
+
+    result = controller.open_file_location("result.txt", workspace_id)
+
+    assert result == {"opened": True, "path": "result.txt"}
+    assert opened == [workspace.resolve()]
+    with pytest.raises(PermissionError):
+        controller.open_file_location("../outside.txt", workspace_id)
 
 
 def test_settings_store_never_receives_api_key(config, tmp_path: Path) -> None:
