@@ -27,6 +27,8 @@ from minicode_agent.tools.filesystem import WriteFileTool
 
 MAX_UPLOAD_FILES = 10
 MAX_UPLOAD_TOTAL_BYTES = 4_000_000
+WEB_API_VERSION = 2
+WEB_CAPABILITIES = ["conversation_uploads", "open_file_location"]
 
 
 def open_directory(path: Path) -> None:
@@ -122,6 +124,8 @@ class WebController:
 
     def bootstrap(self) -> dict[str, Any]:
         return {
+            "api_version": WEB_API_VERSION,
+            "capabilities": WEB_CAPABILITIES,
             "settings": self.public_settings(),
             "history": self.history.list_sessions(),
             "agents": ["coding", "leetcode"],
@@ -216,6 +220,9 @@ class WebController:
             result = writer.execute(item["name"], item["content"], overwrite=False)
             if not result.success:
                 raise ValueError(result.error or f"could not store uploaded file {item['name']}")
+            target = policy.resolve(item["name"], must_exist=True, expect_directory=False)
+            if target.stat().st_size != len(item["content"].encode("utf-8")):
+                raise RuntimeError(f"uploaded file verification failed: {item['name']}")
         return [item["name"] for item in uploads]
 
     @staticmethod

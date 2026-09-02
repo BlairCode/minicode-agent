@@ -1,7 +1,12 @@
 "use strict";
 
+const REQUIRED_API_VERSION = 2;
+const REQUIRED_CAPABILITIES = ["conversation_uploads", "open_file_location"];
+
 const state = {
   token: "",
+  apiVersion: 0,
+  capabilities: new Set(),
   settings: null,
   conversationId: null,
   runId: null,
@@ -68,8 +73,25 @@ async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers });
   let payload = {};
   try { payload = await response.json(); } catch (_) { payload = {}; }
-  if (!response.ok) throw new Error(payload.error || `请求失败 (${response.status})`);
+  if (!response.ok) {
+    let message = payload.error || `请求失败 (${response.status})`;
+    if (message === "API route not found") {
+      message = "后台进程仍在运行旧版接口。请关闭启动终端中的程序，重新运行 python main.py，再刷新页面。";
+    }
+    throw new Error(message);
+  }
   return payload;
+}
+
+function acceptBackendCapabilities(payload) {
+  const version = Number(payload.api_version || 0);
+  const capabilities = new Set(Array.isArray(payload.capabilities) ? payload.capabilities : []);
+  const missing = REQUIRED_CAPABILITIES.filter((name) => !capabilities.has(name));
+  if (version < REQUIRED_API_VERSION || missing.length) {
+    throw new Error("后台进程与当前网页版本不一致。请关闭启动终端中的程序，重新运行 python main.py，再刷新页面。");
+  }
+  state.apiVersion = version;
+  state.capabilities = capabilities;
 }
 
 function toast(message, isError = false) {
@@ -655,6 +677,10 @@ async function startRun() {
     state.preparing = false;
     if (!state.running) elements.send.disabled = false;
   }
+  if (files.length && !state.capabilities.has("conversation_uploads")) {
+    toast("当前后台不支持文件上传，请重启 MiniCode Agent。", true);
+    return;
+  }
   state.currentExecution = null;
   state.activeStep = null;
   state.activeAction = null;
@@ -673,6 +699,14 @@ async function startRun() {
     state.conversationId = payload.id;
     state.fileWorkspaceId = payload.id;
     state.pollAfter = Number.isInteger(payload.after) ? payload.after : -1;
+    const storedUploads = Array.isArray(payload.uploaded_files) ? payload.uploaded_files : [];
+    const requestedNames = files.map((file) => file.name).sort();
+    const storedNames = storedUploads.map(String).sort();
+    if (files.length && JSON.stringify(requestedNames) !== JSON.stringify(storedNames)) {
+      try { await api(`/api/runs/${payload.id}/cancel`, { method: "POST", body: "{}" }); } catch (_) { /* best effort */ }
+      throw new Error("后台没有确认全部上传文件，请重启程序后重新创建对话。当前任务已停止显示，请不要继续追问该会话。");
+    }
+    for (const path of storedUploads) addOutputFile(String(path), "upload");
     clearPendingFiles();
     setAgentLocked(true);
     pollRun();
@@ -866,6 +900,7 @@ async function bootstrap() {
   }
   try {
     const payload = await api("/api/bootstrap");
+    acceptBackendCapabilities(payload);
     fillSettings(payload.settings || {});
     const agents = payload.agents || ["coding"];
     elements.agent.value = agents.includes(payload.default_agent) ? payload.default_agent : agents[0];
@@ -874,7 +909,10 @@ async function bootstrap() {
     else elements.history.append(element("div", "history-placeholder", "完成一次任务后，记录会出现在这里。"));
     setStatus("ready", "就绪");
   } catch (error) {
-    setStatus("failed", "连接失败");
+    const needsRestart = error.message.includes("版本") || error.message.includes("重启");
+    setStatus("failed", needsRestart ? "需要重启" : "连接失败");
+    elements.send.disabled = true;
+    elements.chooseFiles.disabled = true;
     toast(error.message, true);
   }
 }

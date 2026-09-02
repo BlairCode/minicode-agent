@@ -20,6 +20,8 @@ class FakeController:
 
     def bootstrap(self):
         return {
+            "api_version": 2,
+            "capabilities": ["conversation_uploads", "open_file_location"],
             "settings": {"provider": "qwen", "model": "qwen-plus"},
             "history": [],
             "agents": ["coding", "leetcode"],
@@ -85,7 +87,9 @@ def test_local_server_serves_assets_and_protects_api() -> None:
 
         status, _, payload = request(server, "GET", "/api/bootstrap", token)
         assert status == 200
-        assert json.loads(payload)["settings"]["model"] == "qwen-plus"
+        bootstrap = json.loads(payload)
+        assert bootstrap["settings"]["model"] == "qwen-plus"
+        assert bootstrap["api_version"] == 2
     finally:
         server.shutdown()
         server.server_close()
@@ -150,3 +154,16 @@ def test_server_passes_uploads_and_open_location_request() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_second_server_cannot_reuse_an_active_port() -> None:
+    first, _ = create_server(FakeController(), port=0)
+    occupied_port = first.server_address[1]
+    second = None
+    try:
+        second, _ = create_server(FakeController(), port=occupied_port)
+        assert second.server_address[1] != occupied_port
+    finally:
+        first.server_close()
+        if second is not None:
+            second.server_close()

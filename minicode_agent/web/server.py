@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import secrets
+import socket
+import sys
 import threading
 import webbrowser
 from http import HTTPStatus
@@ -28,6 +30,12 @@ MAX_JSON_BODY_BYTES = 6_000_000
 
 class LocalWebServer(ThreadingHTTPServer):
     daemon_threads = True
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def __init__(
         self,
@@ -255,6 +263,11 @@ def run_web(
     controller = WebController(app, config, project_root, settings, settings_store, credential_store)
     server, _token = create_server(controller, config.ui.web_port)
     port = server.server_address[1]
+    if port != config.ui.web_port:
+        print(
+            f"Warning: port {config.ui.web_port} is already in use; this instance is using {port}. "
+            "Close older MiniCode processes and use the URL printed below."
+        )
     url = f"http://127.0.0.1:{port}/"
     if open_browser:
         threading.Timer(0.25, lambda: webbrowser.open(url)).start()

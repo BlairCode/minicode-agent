@@ -164,8 +164,10 @@ def test_runtime_adds_private_workspace_context_without_changing_logged_task(con
     user_message = next(message["content"] for message in model.calls[0][0] if message["role"] == "user")
     first_tool_names = {item["function"]["name"] for item in model.calls[0][1]}
     assert user_message.startswith("Implement the requested code")
-    assert "do not call list_directory" in user_message
+    assert "not call list_directory" in user_message
     assert "requirements.txt" in user_message
+    assert "Do not claim that the workspace or upload set is empty" in user_message
+    assert "create the requested files directly" not in user_message
     assert "list_directory" not in first_tool_names
     started = next(payload for event, payload in events if event == "run_started")
     assert started["task"] == "Implement the requested code"

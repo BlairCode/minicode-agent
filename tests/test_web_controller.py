@@ -58,6 +58,13 @@ def test_public_tool_arguments_hides_file_contents() -> None:
     assert visible["old_text"].endswith("…")
 
 
+def test_bootstrap_advertises_file_workflow_capabilities(config, tmp_path: Path) -> None:
+    controller = make_controller(config, tmp_path, [ModelResponse(text="done")])
+    payload = controller.bootstrap()
+    assert payload["api_version"] == 2
+    assert {"conversation_uploads", "open_file_location"}.issubset(payload["capabilities"])
+
+
 def test_web_run_can_be_polled_to_completion(config, tmp_path: Path) -> None:
     controller = make_controller(
         config,
@@ -169,6 +176,7 @@ def test_upload_is_isolated_and_only_file_name_reaches_model(config, tmp_path: P
     assert (workspace / "settings.toml").read_text(encoding="utf-8") == secret_content
     user_message = next(item["content"] for item in controller.app.llm.calls[0][0] if item["role"] == "user")
     assert "settings.toml" in user_message
+    assert "Do not claim that the workspace or upload set is empty" in user_message
     assert secret_content.strip() not in user_message
     session_text = (controller.history.session_dir / f"{response['id']}.jsonl").read_text(encoding="utf-8")
     assert secret_content.strip() not in session_text

@@ -170,13 +170,21 @@ class AgentRuntime:
             uploaded_files = metadata.get("uploaded_files")
             if isinstance(uploaded_files, list) and uploaded_files:
                 names = ", ".join(str(name) for name in uploaded_files)
-                runtime_notes.append(
-                    "The user uploaded these workspace files for this turn: "
-                    f"{names}. Their contents are not included here; use read_file on relevant files before relying on them."
+                origin = (
+                    "This newly isolated workspace had no other files before the upload. "
+                    if metadata.get("workspace_initially_empty") is True
+                    else ""
                 )
-            if metadata.get("workspace_initially_empty") is True:
                 runtime_notes.append(
-                    "This is the first turn in a newly isolated workspace. It was empty before any listed uploads, "
+                    origin
+                    + "The current workspace now contains these user-uploaded files: "
+                    f"{names}. Do not claim that the workspace or upload set is empty. Their contents are not included "
+                    "in this message. Do not call list_directory to look for them; use read_file on the relevant named "
+                    "files before relying on their contents."
+                )
+            elif metadata.get("workspace_initially_empty") is True:
+                runtime_notes.append(
+                    "This is the first turn in a newly isolated workspace and no files were uploaded. It is empty, "
                     "so do not call list_directory merely to confirm that it is empty; create the requested files directly."
                 )
         if runtime_notes:
