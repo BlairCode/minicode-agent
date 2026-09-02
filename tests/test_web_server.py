@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import threading
 
 from minicode_agent.web.server import create_server
@@ -75,6 +76,18 @@ def test_local_server_serves_assets_and_protects_api() -> None:
         assert "智能编程助手".encode() not in body
         assert "default-src 'self'" in headers["Content-Security-Policy"]
         assert headers["X-Frame-Options"] == "DENY"
+
+        status, headers, body = request(server, "GET", "/app.css")
+        assert status == 200
+        assert headers["Content-Type"] == "text/css; charset=utf-8"
+        shell_rule = re.search(rb"\.app-shell\s*\{([^}]*)\}", body)
+        assert shell_rule is not None
+        assert b"grid-template-rows: minmax(0, 1fr)" in shell_rule.group(1)
+        conversation_rule = re.search(rb"\.conversation\s*\{([^}]*)\}", body)
+        assert conversation_rule is not None
+        assert b"min-height: 0" in conversation_rule.group(1)
+        assert b"height: 100%" not in conversation_rule.group(1)
+        assert b"overflow-y: auto" in conversation_rule.group(1)
 
         status, headers, body = request(server, "GET", "/logo.png")
         assert status == 200
