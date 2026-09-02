@@ -143,3 +143,29 @@ def test_runtime_workspace_override_cannot_escape_base(config, tmp_path: Path) -
     )
     with pytest.raises(ConfigError):
         app.create_runtime("coding", workspace=tmp_path / "outside")
+
+
+def test_runtime_adds_private_workspace_context_without_changing_logged_task(config) -> None:
+    events: list[tuple[str, dict]] = []
+    model = ScriptedLLM([ModelResponse(text="done")])
+    app = Application(config, project_root=Path(__file__).resolve().parents[1], llm=model)
+    runtime = app.create_runtime(
+        "coding",
+        interactive=False,
+        record_sessions=False,
+        event_handler=lambda event, payload: events.append((event, payload)),
+    )
+
+    runtime.run(
+        "Implement the requested code",
+        metadata={"workspace_initially_empty": True, "uploaded_files": ["requirements.txt"]},
+    )
+
+    user_message = next(message["content"] for message in model.calls[0][0] if message["role"] == "user")
+    first_tool_names = {item["function"]["name"] for item in model.calls[0][1]}
+    assert user_message.startswith("Implement the requested code")
+    assert "do not call list_directory" in user_message
+    assert "requirements.txt" in user_message
+    assert "list_directory" not in first_tool_names
+    started = next(payload for event, payload in events if event == "run_started")
+    assert started["task"] == "Implement the requested code"

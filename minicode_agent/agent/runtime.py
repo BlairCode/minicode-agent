@@ -45,6 +45,7 @@ class AgentRuntime:
         self.event_handler = event_handler or (lambda _event, _payload: None)
         self.cancel_event = Event()
         self._active_run: AgentRun | None = None
+        self._first_step_disabled_tools: frozenset[str] = frozenset()
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -61,7 +62,7 @@ class AgentRuntime:
             self._active_run.state = AgentState.RUNNING
         self._emit(event, payload)
 
-    def _complete_with_retry(self) -> ModelResponse:
+    def _complete_with_retry(self, enabled_tools: set[str] | frozenset[str]) -> ModelResponse:
         last_error: ModelError | None = None
         for attempt in range(self.model_retries + 1):
             if self.cancel_event.is_set():
@@ -69,7 +70,7 @@ class AgentRuntime:
             try:
                 return self.llm.complete(
                     self.context.build(),
-                    self.registry.schemas(self.spec.enabled_tools),
+                    self.registry.schemas(enabled_tools),
                 )
             except ModelError as exc:
                 last_error = exc
@@ -84,8 +85,11 @@ class AgentRuntime:
     def step(self, run: AgentRun) -> bool:
         run.steps += 1
         self._emit("step", {"number": run.steps})
+        enabled_tools = self.spec.enabled_tools
+        if run.steps == 1 and self._first_step_disabled_tools:
+            enabled_tools = enabled_tools - self._first_step_disabled_tools
         try:
-            response = self._complete_with_retry()
+            response = self._complete_with_retry(enabled_tools)
         except ModelError as exc:
             if self.cancel_event.is_set():
                 run.state = AgentState.CANCELLED
@@ -110,7 +114,7 @@ class AgentRuntime:
                 if self.cancel_event.is_set():
                     break
                 run.tool_calls += 1
-                result = self.dispatcher.dispatch(call, self.spec.enabled_tools)
+                result = self.dispatcher.dispatch(call, enabled_tools)
                 self.context.add_tool_result(call, result)
                 self._emit("tool_recorded", {"name": call.name, "success": result.success, "fatal": result.fatal})
                 if not result.success:
@@ -155,7 +159,29 @@ class AgentRuntime:
             run_options["session_id"] = session_id
         run = AgentRun(**run_options)
         self._active_run = run
-        self.context.add_user(task)
+        self._first_step_disabled_tools = (
+            frozenset({"list_directory"})
+            if metadata and metadata.get("workspace_initially_empty") is True
+            else frozenset()
+        )
+        model_task = task
+        runtime_notes: list[str] = []
+        if metadata:
+            uploaded_files = metadata.get("uploaded_files")
+            if isinstance(uploaded_files, list) and uploaded_files:
+                names = ", ".join(str(name) for name in uploaded_files)
+                runtime_notes.append(
+                    "The user uploaded these workspace files for this turn: "
+                    f"{names}. Their contents are not included here; use read_file on relevant files before relying on them."
+                )
+            if metadata.get("workspace_initially_empty") is True:
+                runtime_notes.append(
+                    "This is the first turn in a newly isolated workspace. It was empty before any listed uploads, "
+                    "so do not call list_directory merely to confirm that it is empty; create the requested files directly."
+                )
+        if runtime_notes:
+            model_task = f"{task}\n\n[Runtime workspace context]\n" + "\n".join(runtime_notes)
+        self.context.add_user(model_task)
         if self.recorder:
             self.recorder.start(run.session_id)
         started_payload = {"session_id": run.session_id, "agent": self.spec.name, "task": task}
@@ -185,4 +211,5 @@ class AgentRuntime:
             },
         )
         self._active_run = None
+        self._first_step_disabled_tools = frozenset()
         return run
